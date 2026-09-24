@@ -1,0 +1,11 @@
+{
+  "name": "Correr · Dormir · Comer",
+  "short_name": "CorrerDormirComer",
+  "description": "Todas las carreras de España y tu plan de fin de semana: correr, dormir y comer.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#EEF1EF",
+  "theme_color": "#E8491F",
+  "lang": "es",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
