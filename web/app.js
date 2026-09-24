@@ -1096,6 +1096,15 @@ function wrap(ctx, text, maxW, maxLines = 3) {
   if (lines.length > maxLines) { lines.length = maxLines; let l = lines[maxLines - 1]; while (ctx.measureText(l + "…").width > maxW && l.length) l = l.slice(0, -1); lines[maxLines - 1] = l + "…"; }
   return lines;
 }
+function drawLogo(ctx, x, y, size) { // logo (barras con subida, luna y tenedor) en una caja de size×size
+  const k = size / 52; ctx.save(); ctx.translate(x - 6 * k, y - 7 * k); ctx.scale(k, k);
+  [["#E8491F", 8], ["#5A55D2", 25], ["#C9800F", 42]].forEach(([c, bx]) => { ctx.fillStyle = c; rrect(ctx, bx, 9, 14, 46, 7); ctx.fill(); });
+  ctx.strokeStyle = "#fff"; ctx.fillStyle = "#fff"; ctx.lineCap = "round"; ctx.lineJoin = "round";
+  ctx.lineWidth = 2.6; ctx.stroke(new Path2D("M11 23 15 19 19 23M11 29 15 25 19 29"));
+  ctx.fill(new Path2D("M34.2 19.2a5 5 0 1 0 1.8 6.6 4 4 0 1 1-1.8-6.6z"));
+  ctx.lineWidth = 1.9; ctx.stroke(new Path2D("M46 17v6M49 17v6M52 17v6M46 23c0 2 1.3 3 3 3s3-1 3-3M49 26v7"));
+  ctx.restore();
+}
 function rrect(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
 async function cardBlob(p) {
   try { await Promise.all(["800 76px 'Barlow Condensed'", "700 40px Figtree", "400 28px Figtree", "800 26px Figtree"].map(f => document.fonts.load(f))); } catch { /* sin fuentes: las del sistema */ }
@@ -1116,28 +1125,31 @@ async function cardBlob(p) {
   ctx.font = "800 76px 'Barlow Condensed', 'Arial Narrow', sans-serif";
   const titleLines = wrap(ctx, r.name, W - PAD * 2 - 250, 3);
   const ROW_H = 150, QR_H = 540;
-  const H = 150 + 90 + Math.max(250, 40 + titleLines.length * 78 + 70) + 40 + rows.length * ROW_H + 40 + QR_H + 90;
+  const H = 150 + 90 + Math.max(300, 40 + titleLines.length * 78 + 70) + 40 + rows.length * ROW_H + 40 + QR_H + 90;
   cv.width = W; cv.height = H;
   // fondo y cabecera
   ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H);
-  ctx.fillStyle = C.ink; ctx.fillRect(0, 0, W, 150);
-  [C.run, C.sleep, C.eat].forEach((c, i) => { ctx.fillStyle = c; rrect(ctx, PAD + i * 30, 44, 22, 62, 6); ctx.fill(); });
-  ctx.fillStyle = "#fff"; ctx.font = "800 46px 'Barlow Condensed', 'Arial Narrow', sans-serif"; ctx.textBaseline = "middle";
-  ctx.fillText("CORRER · DORMIR · COMER", PAD + 110, 76);
+  ctx.fillStyle = C.white; ctx.fillRect(0, 0, W, 150);
+  ctx.fillStyle = C.line; ctx.fillRect(0, 148, W, 2);
+  drawLogo(ctx, PAD, 36, 80);
+  ctx.textBaseline = "middle"; ctx.font = "800 50px 'Barlow Condensed', 'Arial Narrow', sans-serif";
+  let wx = PAD + 108;
+  [["CORRER", C.ink], [" · ", C.run], ["DORMIR", C.ink], [" · ", C.sleep], ["COMER", C.ink]].forEach(([t, c]) => { ctx.fillStyle = c; ctx.fillText(t, wx, 78); wx += ctx.measureText(t).width; });
   // nombre del plan
   ctx.fillStyle = C.muted; ctx.font = "700 30px Figtree, sans-serif"; ctx.fillText(wrap(ctx, p.title.toUpperCase(), W - PAD * 2, 1)[0], PAD, 150 + 48);
   // bloque carrera con dorsal
   let y = 150 + 90;
-  const blockH = Math.max(250, 40 + titleLines.length * 78 + 70);
+  const blockH = Math.max(300, 40 + titleLines.length * 78 + 70);
   ctx.fillStyle = C.white; rrect(ctx, PAD, y, W - PAD * 2, blockH, 28); ctx.fill();
   const bx = PAD + 30, by = y + 30, bw = 190, bh = blockH - 60;
   ctx.fillStyle = "#F4F6F5"; rrect(ctx, bx, by, bw, bh, 16); ctx.fill();
   ctx.fillStyle = r.surface === "trail" ? C.trail : C.road; rrect(ctx, bx, by, bw, 16, [16, 16, 0, 0]); ctx.fill();
   ctx.fillStyle = C.bg; [bx + 22, bx + bw - 22].forEach(cx => { ctx.beginPath(); ctx.arc(cx, by + 34, 8, 0, 7); ctx.fill(); });
-  ctx.fillStyle = C.ink; ctx.textAlign = "center"; ctx.font = "800 110px 'Barlow Condensed', sans-serif"; ctx.fillText(String(D.getDate()), bx + bw / 2, by + bh / 2 - 6);
+  const mid = by + 18 + (bh - 18) / 2; // día, mes y año repartidos en el dorsal
+  ctx.fillStyle = C.ink; ctx.textAlign = "center"; ctx.font = "800 120px 'Barlow Condensed', sans-serif"; ctx.fillText(String(D.getDate()), bx + bw / 2, mid - 28);
   ctx.font = "700 30px Figtree, sans-serif"; ctx.fillStyle = C.muted;
-  ctx.fillText(`${DAYS[D.getDay()].toUpperCase()} · ${MONTHS[D.getMonth()].toUpperCase()}`, bx + bw / 2, by + bh / 2 + 62);
-  ctx.fillText(String(D.getFullYear()), bx + bw / 2, by + bh - 26); ctx.textAlign = "left";
+  ctx.fillText(`${DAYS[D.getDay()].toUpperCase()} · ${MONTHS[D.getMonth()].toUpperCase()}`, bx + bw / 2, mid + 52);
+  ctx.fillText(String(D.getFullYear()), bx + bw / 2, mid + 92); ctx.textAlign = "left";
   const tx = bx + bw + 36;
   ctx.fillStyle = r.surface === "trail" ? C.trail : C.road; ctx.font = "800 26px Figtree, sans-serif";
   ctx.fillText(r.surface === "trail" ? "TRAIL / MONTAÑA" : "ASFALTO", tx, y + 54);
@@ -1157,9 +1169,10 @@ async function cardBlob(p) {
   }
   // QR + enlace
   y += 24;
-  ctx.fillStyle = C.ink; rrect(ctx, PAD, y, W - PAD * 2, QR_H, 28); ctx.fill();
+  ctx.fillStyle = C.white; rrect(ctx, PAD, y, W - PAD * 2, QR_H, 28); ctx.fill();
+  ctx.fillStyle = C.run; rrect(ctx, PAD, y, 14, QR_H, [28, 0, 0, 28]); ctx.fill();
   const qs = QR_H - 70, qx = W - PAD - 35 - qs, qy = y + 35;
-  ctx.fillStyle = "#fff"; rrect(ctx, qx, qy, qs, qs, 14); ctx.fill();
+  ctx.strokeStyle = C.line; ctx.lineWidth = 3; rrect(ctx, qx, qy, qs, qs, 14); ctx.stroke();
   if (window.qrcode && url.startsWith("http")) {
     try {
       const qr = qrcode(0, "L"); qr.addData(url); qr.make();
@@ -1168,9 +1181,9 @@ async function cardBlob(p) {
       for (let a = 0; a < n; a++) for (let b = 0; b < n; b++) if (qr.isDark(a, b)) ctx.fillRect(qx + off + b * cell, qy + off + a * cell, cell, cell);
     } catch { /* plan demasiado grande para QR */ }
   }
-  ctx.fillStyle = "#fff"; ctx.font = "800 44px 'Barlow Condensed', sans-serif";
+  ctx.fillStyle = C.ink; ctx.font = "800 44px 'Barlow Condensed', sans-serif";
   wrap(ctx, "GUARDA ESTE PLAN EN TU APP", qx - PAD - 60, 3).forEach((l, i) => ctx.fillText(l, PAD + 36, y + 80 + i * 48));
-  ctx.fillStyle = "#C9D3CE"; ctx.font = "400 28px Figtree, sans-serif";
+  ctx.fillStyle = C.muted; ctx.font = "400 28px Figtree, sans-serif";
   wrap(ctx, "Escanea el código o abre el enlace del mensaje: se abre el plan completo y puedes guardarlo en Correr·Dormir·Comer.", qx - PAD - 70, 7).forEach((l, i) => ctx.fillText(l, PAD + 36, y + 250 + i * 36));
   // pie
   ctx.fillStyle = C.muted; ctx.font = "400 24px Figtree, sans-serif"; ctx.textAlign = "center";

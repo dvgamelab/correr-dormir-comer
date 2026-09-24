@@ -1,6 +1,6 @@
 // Service worker: app offline + datos con "red primero".
-const V = "cdc-v4";
-const SHELL = ["./", "index.html", "app.css", "vendor-leaflet.css", "app.js", "manifest.webmanifest", "icon.svg", "icon-192.png", "icon-512.png", "data/spain.geo.json", "data/municipios.json", "fonts/fonts.css", "fonts/BarlowCondensed-700.woff2", "fonts/BarlowCondensed-800.woff2", "fonts/Figtree-400.woff2"];
+const V = "cdc-v5";
+const SHELL = ["./", "index.html", "app.css", "vendor-leaflet.css", "app.js", "manifest.webmanifest", "icon.svg", "logo-mark.svg", "icon-192.png", "icon-512.png", "data/spain.geo.json", "data/municipios.json", "fonts/fonts.css", "fonts/BarlowCondensed-700.woff2", "fonts/BarlowCondensed-800.woff2", "fonts/Figtree-400.woff2"];
 self.addEventListener("install", e => e.waitUntil(caches.open(V).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())));
 self.addEventListener("activate", e => e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== V).map(k => caches.delete(k)))).then(() => self.clients.claim())));
 self.addEventListener("fetch", e => {

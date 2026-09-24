@@ -50,9 +50,7 @@ h1,h2,h3{font-family:var(--display);letter-spacing:.01em;text-wrap:balance;margi
 .brand-row{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0}
 .brand{min-width:0;overflow:hidden}
 .brand{display:flex;align-items:center;gap:8px;text-decoration:none}
-.brand-mark{display:grid;grid-template-columns:repeat(3,7px);gap:2px}
-.brand-mark i{height:18px;border-radius:2px;display:block}
-.brand-mark .d1{background:var(--accent)} .brand-mark .d2{background:var(--stay)} .brand-mark .d3{background:var(--eat)}
+.brand-mark{width:28px;height:27px;display:block;flex:none}
 .brand-word{font-family:var(--display);font-weight:800;font-size:clamp(14px,3.9vw,19px);white-space:nowrap;letter-spacing:.03em;text-transform:uppercase}
 .brand-word b{color:var(--accent);padding:0 1px}
 .count{margin:0;flex:none;font-size:12px;color:var(--muted);font-weight:600;white-space:nowrap}

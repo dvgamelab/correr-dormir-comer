@@ -21,6 +21,6 @@ shutil.rmtree(OUT, ignore_errors=True)
 os.makedirs(os.path.join(OUT, "data"))
 shutil.copytree(os.path.join(WEB, "fonts"), os.path.join(OUT, "fonts"), ignore=shutil.ignore_patterns("*.css"))
 open(os.path.join(OUT, "index.html"), "w", encoding="utf-8").write(html.strip() + "\n")
-for f in ("app.js", "data/races.json", "data/spain.geo.json", "data/municipios.json"):
+for f in ("app.js", "logo-mark.svg", "data/races.json", "data/spain.geo.json", "data/municipios.json"):
     shutil.copy(os.path.join(WEB, f), os.path.join(OUT, f))
 print("OK →", OUT)
