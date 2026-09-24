@@ -478,7 +478,8 @@ let lastBack = 0;
 function handleBack() {
   if (!$("#viewer")?.hidden && $("#viewer")) { closeViewer(); return true; }
   if (!$("#filterSheet").hidden) { openFilterSheet(false); return true; }
-  if (STACK.length) { STACK.pop().close(); return true; }
+  if ($("#dialog") && !$("#dialog").hidden) { $("#dialog").hidden = true; return true; } // atrás = seguir editando
+  if (STACK.length) { if (STACK[STACK.length - 1].name === "plan" && planGuard()) return true; STACK.pop().close(); return true; }
   if ($("#mapCard") && !$("#mapCard").hidden) { $("#mapCard").hidden = true; selId = null; drawMarkers(); return true; }
   const tab = $(".tabbar button.on")?.dataset.view;
   if (tab && tab !== "list") { setTab("list"); return true; }
@@ -640,16 +641,56 @@ function savePlan(p) { plans[p.id] = p; store.set("plans", plans); $("#plansCoun
 function deletePlan(id) { delete plans[id]; store.set("plans", plans); $("#plansCount").textContent = Object.keys(plans).length; }
 
 let P = null, pmap = null, pLayers = {};
+let DIRTY = false;
+const isSaved = p => !!plans[p.id];
 function openPlan(p, readonly = false) {
+  p = JSON.parse(JSON.stringify(p)); // se edita una copia; "Guardar plan" la pasa a Mis planes
+  DIRTY = false;
   P = p;
   const v = $("#planView");
   v.hidden = false; v.scrollTop = 0;
   if (!STACK.some(x => x.name === "plan")) pushScreen("plan", hidePlan);
   renderPlan();
-  if (!readonly && !plans[p.id]) savePlan(p);
 }
-function closePlan() { popScreen("plan"); }
-function hidePlan() { $("#planView").hidden = true; if (pmap) { pmap.remove(); pmap = null; } P = null; if (!$("#plansView").hidden) openPlans(); }
+function closePlan() { if (!planGuard()) popScreen("plan"); }
+// Salir con cambios sin guardar: pregunta antes de perder lo configurado
+function planGuard(after) {
+  if (!P || !DIRTY) return false;
+  confirmDialog({
+    title: isSaved(P) ? "¿Salir sin guardar los cambios?" : "¿Salir sin guardar el plan?",
+    text: isSaved(P) ? "Los cambios que has hecho en este plan se perderán." : "Todavía no está en «Mis planes». Si sales ahora perderás todo lo que has configurado.",
+    buttons: [
+      { label: "Guardar y salir", cls: "primary", fn: () => { commitSave(); popScreen("plan"); after?.(); } },
+      { label: "Salir sin guardar", cls: "ghost danger", fn: () => { DIRTY = false; popScreen("plan"); after?.(); } },
+      { label: "Seguir editando", cls: "ghost", fn: () => {} },
+    ],
+  });
+  return true;
+}
+function commitSave() {
+  if (!P) return;
+  const { _saved, ...clean } = P;
+  savePlan(JSON.parse(JSON.stringify(clean))); DIRTY = false; updateSaveBar();
+}
+function updateSaveBar() {
+  const b = $("#pSave"); if (!b || !P) return;
+  const saved = isSaved(P);
+  b.disabled = saved && !DIRTY;
+  b.textContent = !saved ? "Guardar plan" : DIRTY ? "Guardar cambios" : "✓ Guardado en Mis planes";
+  b.classList.toggle("done", saved && !DIRTY);
+  $("#saveHint").textContent = !saved ? "Aún no está en Mis planes" : DIRTY ? "Tienes cambios sin guardar" : "";
+}
+function confirmDialog({ title, text, buttons }) {
+  let d = $("#dialog");
+  if (!d) { d = document.createElement("div"); d.id = "dialog"; d.className = "dialog-wrap"; $("#app").appendChild(d); }
+  d.innerHTML = `<div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="dlgT"><h2 id="dlgT">${esc(title)}</h2><p>${esc(text)}</p>
+    <div class="dialog-actions">${buttons.map((b, i) => `<button class="btn ${b.cls}" type="button" data-i="${i}">${esc(b.label)}</button>`).join("")}</div></div>`;
+  d.hidden = false;
+  const close = () => { d.hidden = true; };
+  d.onclick = e => { const b = e.target.closest("[data-i]"); if (b) { close(); buttons[+b.dataset.i].fn(); } else if (e.target === d) close(); };
+  d.querySelector(".btn").focus();
+}
+function hidePlan() { $("#planView").hidden = true; if (pmap) { pmap.remove(); pmap = null; } P = null; DIRTY = false; if (!$("#plansView").hidden) openPlans(); }
 
 function nightsOf(p) { return Math.max(0, Math.round((pd(p.leave) - pd(p.arrive)) / 864e5)); }
 
@@ -770,10 +811,12 @@ function renderPlan() {
         </div>
         <div class="qr" id="qr"></div>
         <details><summary class="small muted">Código del plan (para pegar en «Importar»)</summary><div class="code" id="planCode">…</div></details>
-        <button class="link-btn small" id="pDelete" type="button">Borrar este plan</button>
+        ${isSaved(p) ? `<button class="link-btn small" id="pDelete" type="button">Borrar este plan</button>` : ""}
       </section>
-  </div>`;
+  </div>
+  <div class="save-bar"><span class="small muted" id="saveHint"></span><button class="btn primary block" id="pSave" type="button">Guardar plan</button></div>`;
   bindPlan();
+  updateSaveBar();
   drawPlanMap();
   refreshShare();
 }
@@ -849,7 +892,13 @@ function budgetHTML(p) {
 
 function bindPlan() {
   const p = P, v = $("#planView");
-  const commit = (rerender = true) => { savePlan(p); if (rerender) { const y = v.scrollTop; renderPlan(); v.scrollTop = y; } else refreshShare(); };
+  const commit = (rerender = true) => { DIRTY = true; if (rerender) { const y = v.scrollTop; renderPlan(); v.scrollTop = y; } else { refreshShare(); updateSaveBar(); } };
+  updateSaveBar();
+  $("#pSave").onclick = () => {
+    const wasNew = !isSaved(p); commitSave();
+    if (wasNew) { $("#plansCount").textContent = Object.keys(plans).length; toast("Plan guardado en «Mis planes»"); if ($("#pDelete") == null) { const y = v.scrollTop; renderPlan(); v.scrollTop = y; } }
+    else toast("Cambios guardados");
+  };
   $("#pvClose").onclick = closePlan;
   $("#pvShare").onclick = () => $("#shareBox").scrollIntoView({ behavior: "smooth" });
   $$("#seg a").forEach(a => a.onclick = e => { e.preventDefault(); $(a.getAttribute("href")).scrollIntoView({ behavior: "smooth", block: "start" }); });
@@ -898,8 +947,8 @@ function bindPlan() {
   $("#cardPreviewBtn").onclick = () => { const u = $("#cardPreview").src; if (u) openViewer(u, p.title); };
   $("#shIcs").onclick = () => downloadOrCopy(planICS(p), `${slug(p.title)}.ics`, "text/calendar");
   $("#shJson").onclick = () => downloadOrCopy(JSON.stringify(p, null, 2), `${slug(p.title)}.json`, "application/json");
-  $("#pDelete").onclick = e => {
-    if (e.target.dataset.sure) { const bk = plans[p.id]; deletePlan(p.id); closePlan(); if (!$("#plansView").hidden) openPlans(); if (bk) undoToast("Plan borrado", () => { savePlan(bk); if (!$("#plansView").hidden) openPlans(); }); }
+  if ($("#pDelete")) $("#pDelete").onclick = e => {
+    if (e.target.dataset.sure) { const bk = plans[p.id]; deletePlan(p.id); DIRTY = false; closePlan(); if (!$("#plansView").hidden) openPlans(); if (bk) undoToast("Plan borrado", () => { savePlan(bk); if (!$("#plansView").hidden) openPlans(); }); }
     else { e.target.dataset.sure = 1; e.target.textContent = "Pulsa otra vez para borrarlo"; }
   };
   // clic en resultados (delegado)
@@ -1263,13 +1312,9 @@ async function handleIncomingPlan() {
   } catch { toast("El enlace del plan está incompleto o dañado"); }
 }
 function openSharedPlan(p) {
-  const exists = plans[p.id];
   openPlan(p, true);
-  const bar = $("#planView .bar");
-  const b = document.createElement("button");
-  b.className = "btn primary small"; b.type = "button"; b.textContent = exists ? "Actualizar" : "Guardar";
-  b.onclick = () => { savePlan(P); b.remove(); toast("Plan guardado en «Mis planes»"); };
-  bar.insertBefore(b, $("#pvShare"));
+  const bar = $("#planView .bar"), b = $("#pvShare");
+  if (!isSaved(p)) toast("Plan recibido: pulsa «Guardar plan» para quedártelo");
   if (!APP && /Android/i.test(navigator.userAgent)) { // web en Android: pasar el plan a la app instalada
     encodePlan(p).then(code => {
       const a = document.createElement("a"); a.className = "btn ghost small"; a.textContent = "Abrir en la app";
@@ -1337,6 +1382,7 @@ function undoToast(msg, undo) {
 
 // ------------------------------------------------------------------ vistas móvil
 function setTab(view) {
+  if (P && planGuard(() => setTab(view))) return; // cambiar de pestaña con un plan a medias
   $$(".tabbar button").forEach(b => b.classList.toggle("on", b.dataset.view === view));
   while (STACK.length) STACK.pop().close();
   $("#viewMap").hidden = view !== "map";
@@ -1360,6 +1406,7 @@ function init() {
   $$(".tabbar button").forEach(b => b.onclick = () => setTab(b.dataset.view));
   document.addEventListener("keydown", e => { if (e.key === "Escape") handleBack(); });
   initBack(); initDeepLinks();
+  addEventListener("beforeunload", e => { if (DIRTY) { e.preventDefault(); e.returnValue = ""; } });
   if (window.CDC_APP) document.addEventListener("click", e => { // Android: enlaces externos en el navegador del sistema
     const a = e.target.closest("a[href^='http']"); if (!a) return;
     const P = window.Capacitor?.Plugins || {};

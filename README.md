@@ -30,6 +30,8 @@ Proyecto personal, sin monetización.
 - Ficha de cada carrera con fecha, lugar, distancias, desnivel, web oficial o inscripción, y enlaces a las fuentes.
 
 **Planificar (correr → dormir → comer)**
+- "Planificar finde" abre un **borrador**. No entra en "Mis planes" hasta que pulsas **Guardar plan** (botón fijo abajo). En un plan ya guardado, el botón pasa a **Guardar cambios**.
+- Si sales con cambios sin guardar (flecha, botón atrás del móvil), la app pregunta: **Guardar y salir**, **Salir sin guardar** o **Seguir editando**.
 - **Correr**: distancia que corres, número de personas, desde dónde sales (km y tiempo aproximados, y ruta en Google Maps), fechas de llegada y vuelta.
 - **Dormir**: busca hoteles, hostales, apartamentos, casas rurales, campings y refugios cerca de la salida (OpenStreetMap/Overpass) ordenados por distancia. También lleva a Booking, Airbnb y Google Hoteles con las fechas y personas ya puestas. Puedes añadir alojamientos a mano.
 - **Comer**: cena de la víspera (pasta), desayuno y comida post-carrera, y puedes añadir más comidas. Sugiere sitios cercanos según lo que te apetezca (italiano, local/tapas, cafetería, vegetariano, asiático…).

@@ -295,3 +295,17 @@ input[type=date],input[type=time]{min-width:0;max-width:100%}
 .btn.danger.confirm{background:#C62828;color:#fff;border-color:#C62828}
 .plans-sub{font-size:18px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:10px 0 0}
 .toast .undo{margin-left:10px;background:none;border:0;color:var(--accent);font-weight:800;text-decoration:underline;cursor:pointer}
+
+/* plan: guardar explícito */
+.save-bar{position:sticky;bottom:0;z-index:12;display:grid;gap:4px;padding:10px 16px calc(12px + var(--safe-b));background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(8px);border-top:1px solid var(--line)}
+.save-bar #saveHint{text-align:center}
+.save-bar #saveHint:empty{display:none}
+.save-bar .btn{min-height:50px;font-size:16px}
+.save-bar .btn.done{background:var(--surface);color:var(--trail);border-color:var(--line)}
+.save-bar .btn:disabled{cursor:default}
+/* diálogo de confirmación */
+.dialog-wrap{position:absolute;inset:0;z-index:90;background:rgba(0,0,0,.45);display:grid;place-items:end center;padding:16px 16px calc(16px + var(--safe-b))}
+.dialog{width:100%;max-width:440px;background:var(--surface);border-radius:18px;padding:18px;display:grid;gap:10px;box-shadow:var(--shadow);animation:up .18s ease-out}
+.dialog h2{font-size:26px;font-weight:800}
+.dialog p{margin:0;color:var(--muted)}
+.dialog-actions{display:grid;gap:8px;margin-top:6px}
