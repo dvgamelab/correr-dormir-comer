@@ -40,17 +40,18 @@ Funciona como PWA: se puede instalar en el móvil y usar sin conexión con los d
 | [Corriendo Voy](https://corriendovoy.com/calendario-de-carreras/) | Calendario WordPress con hora de salida |
 
 - Se descarta lo que no es correr: BTT, ciclismo, triatlón, duatlón, natación, orientación, esquí, virtuales y marchas no competitivas.
-- Coordenadas: las de la fuente si las trae. Si no, se buscan en Nominatim (OSM) con caché en `data/cache/geocode.json`. Como último recurso se usa el centro de la provincia, y el mapa marca esas carreras como "ubicación aproximada".
+- Coordenadas: las de la fuente si las trae. Si no, las de otra carrera del mismo pueblo, o se buscan en Photon (Komoot, OSM) con Nominatim de respaldo y caché en `data/cache/geocode.json`. Como último recurso se usa el centro de la provincia, y el mapa marca esas carreras como "ubicación aproximada".
+- La provincia se calcula por polígono con los límites del IGN, así que no depende de cómo la escriba cada web.
 - Si una fuente falla, se reutiliza su último volcado (`data/raw/*.json`) y la app lo indica en el pie de la lista.
 
-Fuentes que se probaron y no se usan todavía: ClubRunning, CarrerasPorMontaña y Ahotu tienen captcha o Cloudflare. Runnun guarda los datos dentro de su app. TrailRun.es no tiene calendario publicado. Se pueden añadir como un módulo más en `scraper/sources/`.
+Fuentes que se probaron y no se usan todavía: ClubRunning, CarrerasPorMontaña y Ahotu tienen captcha o Cloudflare. Runnun guarda los datos dentro de su app. RockTheSport y Sportmaniacs exigen credenciales en su API, aunque muchas de sus carreras entran vía running.life. TrailRun.es no tiene calendario publicado. Se pueden añadir como un módulo más en `scraper/sources/`.
 
 ## Poner en marcha
 
 ### En local
 ```bash
 pip install -r scraper/requirements.txt
-python scraper/run.py            # tarda ~30-45 min la 1ª vez (fichas + geocoding); luego va con caché
+python scraper/run.py            # ~20 min la 1ª vez (fichas de detalle); luego ~3 min gracias a la caché
 cd web && python -m http.server 8000   # abre http://localhost:8000
 ```
 Para refrescar solo una fuente: `python scraper/run.py --only runedia`.

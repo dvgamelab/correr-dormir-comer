@@ -94,16 +94,9 @@ def fetch(cache: dict, max_details=700):
         det = details.get(slug, {})
         desc = it.get("description", "")
         dists = parse_distances(re.sub(r"will take place.*?\d{4}\.", "", desc))
-        cats = det.get("cats", [])
-        if slug in trail_slugs or "Trail Run" in cats or "Urban Trail" in cats:
-            surface = "trail"
-        elif "Road Race" in cats:
-            surface = "road"
-        else:
-            surface = guess_surface(it.get("name", "")) or "road"
-        kind = ", ".join(cats)
-        if "Obstacle Run" in cats:
-            kind = "Obstáculos"
+        # (las categorías de la ficha incluyen las de "carreras cercanas": no son fiables)
+        surface = "trail" if slug in trail_slugs else (guess_surface(it.get("name", "")) or "road")
+        kind = "Obstáculos" if re.search(r"obst[aá]c|spartan|invictus|farinato|\brace\b.*(ocr|obst)", it.get("name", ""), re.I) else ""
         races.append(Race(
             source="running.life", source_url=it.get("url", ""), name=it.get("name", "").strip(),
             date=(it.get("startDate") or "")[:10], city=addr.get("addressLocality", ""),

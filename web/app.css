@@ -221,7 +221,9 @@ h1,h2,h3{font-family:var(--display);letter-spacing:.01em;text-wrap:balance;margi
 
 @media (max-width:900px){
   .pv-wrap{grid-template-columns:1fr}
-  .pv-side{position:static;order:-1}
+  .pv-side{display:contents}
+  #planMap{order:-1}
+  #shareBox{order:1}
   #planMap{height:240px}
 }
 @media (max-width:760px){

@@ -620,7 +620,7 @@ function drawPlanMap() {
   if (!window.L) return;
   if (pmap) { pmap.remove(); pmap = null; }
   const r = P.race;
-  pmap = L.map("planMap", { zoomControl: true, attributionControl: true }).setView([r.lat || 40.2, r.lon || -3.6], r.lat ? 13 : 6);
+  pmap = L.map("planMap", { preferCanvas: true, zoomControl: true, attributionControl: true }).setView([r.lat || 40.2, r.lon || -3.6], r.lat ? 13 : 6);
   baseLayers(pmap);
   pLayers.cand = L.layerGroup().addTo(pmap);
   const pts = [];

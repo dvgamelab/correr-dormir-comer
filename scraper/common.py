@@ -122,8 +122,8 @@ def parse_elevation(text: str):
 
 
 TRAIL_WORDS = re.compile(
-    r"trail|monta[ñn]a|mountain|muntanya|mendi|sky|ultra|vertical|\bkv\b|\bkm vertical|cresta|sierra|serra|pico|cumbre|"
-    r"travesía|travesia|cim[ae]s|peñ|trail|desafío|desafio|raid|rutas?\b|senda|camino|circuit de muntanya|cursa de muntanya|lasterketa",
+    r"trail|monta[ñn]a|mountain|muntanya|mendi|sky ?race|skyrunning|ultra|vertical|\bkv\b|\bkm vertical|cresta|cumbre|"
+    r"travesía|travesia|cims?\b|cursa de muntanya|mendi lasterketa|\bcxm\b|\bcpm\b|carrera por monta|desnivel",
     re.I,
 )
 ROAD_WORDS = re.compile(r"asfalto|urbana|\b10k\b|\b5k\b|media marat|san silvestre|night ?run|nocturna|popular|marat[oó]n (?!de monta)|milla", re.I)

@@ -120,3 +120,57 @@ def in_spain(lat, lon):
     if lat is None or lon is None:
         return False
     return (35.0 <= lat <= 44.0 and -9.6 <= lon <= 4.6) or (27.4 <= lat <= 29.5 and -18.3 <= lon <= -13.2)
+
+
+# ------------------------------------------------ provincia por polígono (IGN / es-atlas)
+_POLYS = None
+
+
+def _load_polys():
+    import json
+    import os
+    global _POLYS
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "web", "data", "spain.geo.json")
+    _POLYS = []
+    with open(path, encoding="utf-8") as f:
+        for feat in json.load(f)["features"]:
+            prov = norm_province(feat["properties"]["n"])
+            if not prov:
+                continue
+            g = feat["geometry"]
+            polys = [g["coordinates"]] if g["type"] == "Polygon" else g["coordinates"]
+            for rings in polys:
+                xs = [p[0] for p in rings[0]]
+                ys = [p[1] for p in rings[0]]
+                _POLYS.append((prov, (min(xs), min(ys), max(xs), max(ys)), rings))
+
+
+def _in_ring(x, y, ring):
+    inside = False
+    j = len(ring) - 1
+    for i in range(len(ring)):
+        xi, yi = ring[i]
+        xj, yj = ring[j]
+        if (yi > y) != (yj > y) and x < (xj - xi) * (y - yi) / ((yj - yi) or 1e-12) + xi:
+            inside = not inside
+        j = i
+    return inside
+
+
+def province_at(lat, lon):
+    """Provincia que contiene el punto; si cae fuera (costa, polígono simplificado), la más cercana."""
+    if lat is None or lon is None:
+        return None
+    if _POLYS is None:
+        _load_polys()
+    for prov, (x0, y0, x1, y1), rings in _POLYS:
+        if x0 <= lon <= x1 and y0 <= lat <= y1 and _in_ring(lon, lat, rings[0]) \
+                and not any(_in_ring(lon, lat, h) for h in rings[1:]):
+            return prov
+    best, bd = None, 1e9
+    for prov, (x0, y0, x1, y1), rings in _POLYS:
+        cx, cy = min(max(lon, x0), x1), min(max(lat, y0), y1)
+        d = (cx - lon) ** 2 + (cy - lat) ** 2
+        if d < bd:
+            best, bd = prov, d
+    return best if bd < 0.25 else None

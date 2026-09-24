@@ -45,17 +45,48 @@ SOURCE_LABEL = {
 # ------------------------------------------------------------------ geocoding
 
 class Geocoder:
-    """Nominatim (OSM) con caché persistente. Máx. 1 petición/s según su política."""
+    """Photon (Komoot, datos OSM) con Nominatim de respaldo y caché persistente.
+    La provincia se calcula siempre por polígono (geo.province_at)."""
 
     def __init__(self, path, budget=400):
         self.path, self.budget = path, budget
         self.cache = load(path, {})
         self.s = session()
         self.s.headers["User-Agent"] = "correr-dormir-comer/1.0 (uso personal; calendario de carreras)"
+        self.s.mount("https://", __import__("requests").adapters.HTTPAdapter(max_retries=1))
         self.last = 0.0
+        self.nominatim_ok = True
 
     def save(self):
         dump(self.path, self.cache)
+
+    def _wait(self, secs):
+        w = secs - (time.time() - self.last)
+        if w > 0:
+            time.sleep(w)
+        self.last = time.time()
+
+    def _photon(self, q):
+        self._wait(0.35)
+        r = self.s.get("https://photon.komoot.io/api/", timeout=20, params={
+            "q": q, "limit": 1, "bbox": "-18.5,27.5,4.6,44.0", "osm_tag": "place"})
+        for f in r.json().get("features", []):
+            if f["properties"].get("countrycode") == "ES":
+                lon, lat = f["geometry"]["coordinates"]
+                return lat, lon
+        return None
+
+    def _nominatim(self, q):
+        if not self.nominatim_ok:
+            return None
+        self._wait(1.1)
+        r = self.s.get("https://nominatim.openstreetmap.org/search", timeout=20, params={
+            "q": q, "format": "jsonv2", "limit": 1, "countrycodes": "es"})
+        if r.status_code == 429:
+            self.nominatim_ok = False
+            return None
+        res = r.json()
+        return (float(res[0]["lat"]), float(res[0]["lon"])) if res else None
 
     def lookup(self, city, province=None, region=None):
         if not city:
@@ -66,26 +97,26 @@ class Geocoder:
         if self.budget <= 0:
             return None
         self.budget -= 1
-        q = ", ".join(x for x in [city, province or region, "España"] if x)
-        wait = 1.1 - (time.time() - self.last)
-        if wait > 0:
-            time.sleep(wait)
-        self.last = time.time()
-        try:
-            r = self.s.get("https://nominatim.openstreetmap.org/search", timeout=30, params={
-                "q": q, "format": "jsonv2", "limit": 1, "addressdetails": 1, "countrycodes": "es"})
-            res = r.json()
-        except Exception as e:  # noqa: BLE001
-            log.warning("geocode %s: %s", q, e)
-            return None
-        if not res:
+        q = ", ".join(x for x in [city, province or region] if x)
+        hit = None
+        for fn in (self._photon, self._nominatim):
+            try:
+                hit = fn(q)
+            except Exception as e:  # noqa: BLE001
+                log.warning("geocode %s (%s): %s", q, fn.__name__, e)
+            if hit:
+                break
+        if not hit or not geo.in_spain(*hit):
             self.cache[key] = {}
             return {}
-        a = res[0].get("address", {})
-        prov = geo.norm_province(a.get("province") or a.get("state_district") or a.get("county") or "") \
-            or geo.norm_province(a.get("state") or "")
-        val = {"lat": round(float(res[0]["lat"]), 5), "lon": round(float(res[0]["lon"]), 5), "province": prov}
+        prov = geo.province_at(*hit)
+        if province and prov and prov != province:  # el pueblo encontrado está en otra provincia: dudoso
+            self.cache[key] = {}
+            return {}
+        val = {"lat": round(hit[0], 5), "lon": round(hit[1], 5), "province": prov}
         self.cache[key] = val
+        if len(self.cache) % 50 == 0:
+            self.save()
         return val
 
 
@@ -107,8 +138,13 @@ edicion ed edicio memorial trofeo gran premio circuito km k m trail 2026 2027 20
 ROMAN = re.compile(r"^(?=[mdclxvi]+$)m{0,3}(cm|cd|d?c{0,3})(xc|xl|l?x{0,3})(ix|iv|v?i{0,3})$")
 
 
+WEAK = set("""solidaria solidari benefica nocturna urbana media maraton marato mitja milla legua cross night race
+running corre correr carreira popular infantil familiar mujer dona women trail sant santa san virgen fiestas""".split())
+
+
 def tokens(name):
     t = geo.fold(name)
+    t = re.sub(r"([a-z])(\d)|(\d)([a-z])", r"\1\3 \2\4", t)
     t = re.sub(r"\b\d+\s*(a|o|th|st|nd|rd|ª|º|era|er|na|ena)\b", " ", t)
     out = set()
     for w in t.split():
@@ -159,6 +195,7 @@ def categories(distances, surface):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--only", nargs="*", help="fuentes a refrescar")
+    ap.add_argument("--build-only", action="store_true", help="no descargar; reconstruir desde data/raw")
     ap.add_argument("--geocode-budget", type=int, default=int(os.environ.get("GEOCODE_BUDGET", 1500)))
     ap.add_argument("--details", type=int, default=int(os.environ.get("DETAIL_BUDGET", 700)))
     args = ap.parse_args()
@@ -169,7 +206,7 @@ def main():
 
     status = load(os.path.join(DATA, "status.json"), {})
     for name, mod in SOURCES.items():
-        if args.only and name not in args.only:
+        if args.build_only or (args.only and name not in args.only):
             continue
         cpath = os.path.join(CACHE, f"{name}.json")
         cache = load(cpath, {})
@@ -219,18 +256,19 @@ def build(geocode_budget, status):
         ccaa = geo.ccaa_of(prov) or geo.norm_ccaa(r.get("region", ""))
         approx = False
         if not r.get("lat"):
-            hit = gc.lookup(r.get("city"), prov, ccaa)
-            if hit and hit.get("lat"):
+            t = town.get(geo.fold(r.get("city", "")))
+            hit = None
+            if t and (not prov or geo.province_at(*t) == prov):
+                r["lat"], r["lon"] = t
+                prov = prov or geo.province_at(*t)
+            elif (hit := gc.lookup(r.get("city"), prov, ccaa)) and hit.get("lat"):
                 r["lat"], r["lon"] = hit["lat"], hit["lon"]
                 prov = prov or hit.get("province")
-            elif geo.fold(r.get("city", "")) in town:
-                r["lat"], r["lon"] = town[geo.fold(r["city"])]
             elif prov:
                 r["lat"], r["lon"] = geo.centroid(prov)
                 approx = True
         elif not prov:
-            hit = gc.lookup(r.get("city"), None, ccaa)
-            prov = (hit or {}).get("province") or nearest_province(r["lat"], r["lon"], ccaa)
+            prov = geo.province_at(r["lat"], r["lon"]) or nearest_province(r["lat"], r["lon"], ccaa)
         if r.get("lat") and not geo.in_spain(r["lat"], r["lon"]):
             r["lat"] = r["lon"] = None
         r["province"] = prov or ""
@@ -255,6 +293,8 @@ def build(geocode_budget, status):
                     same_town = geo.fold(r.get("city", "")) and geo.fold(r.get("city", "")) == geo.fold(o.get("city", ""))
                     near = (d is not None and d < 12 and not (r.get("approx") or o.get("approx"))) or same_town
                     score = sim + (0.25 if near else 0) - (0.3 if d is not None and d > 60 and not (r.get("approx") or o.get("approx")) else 0)
+                    if near and any(len(w) >= 5 and w not in WEAK for w in r["_tok"] & o["_tok"]):
+                        score = max(score, 0.6)  # mismo pueblo, mismo día y comparten una palabra distintiva
                     if score > bs:
                         best, bs = c, score
             if best is not None and bs >= 0.6:
