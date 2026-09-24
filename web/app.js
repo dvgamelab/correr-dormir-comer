@@ -69,8 +69,15 @@ async function loadPlaces() {
       for (const v of variants) { addPlace(v.trim(), la, lo, pr, true); MUNI.add(fold(v.trim()).replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim()); }
     }
     $("#towns").innerHTML = m.map(x => `<option value="${esc(x[0].split("/")[0])}">`).join("");
+    // carreras situadas en el centro de la provincia → centro de su municipio si lo encontramos
+    for (const r of RACES) {
+      if (!r.approx || !r.city) continue;
+      const k = fold(r.city).replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
+      const c = (PLACES.get(k) || []).filter(x => x.muni && (!r.province || !x.prov || x.prov === r.province));
+      if (c.length === 1) { r.lat = c[0].lat; r.lon = c[0].lon; r.approx = false; }
+    }
+    apply();
   } catch { /* sin municipios: se usan los pueblos de las carreras */ }
-  if (F.q) apply();
 }
 function findPlace(q) {
   const k = fold(q).replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
@@ -111,8 +118,10 @@ async function load() {
     $("#count").textContent = "No se pudieron cargar las carreras.";
     console.error(e); return;
   }
+  const unamp = u => u && u.replace(/&amp;/g, "&");
   for (const r of RACES) {
     BYID.set(r.id, r);
+    r.img = unamp(r.img); r.web = unamp(r.web); r.reg = unamp(r.reg);
     r._s = fold(`${r.name} ${r.city || ""} ${r.province || ""} ${r.ccaa || ""}`);
     r._nc = fold(`${r.name} ${r.city || ""}`).replace(/[^a-z0-9 ]+/g, " ");
     if (r.city && r.lat && !r.approx) { const k = fold(r.city); if (!TOWNS.has(k)) TOWNS.set(k, { name: r.city, lat: r.lat, lon: r.lon }); }
@@ -457,20 +466,43 @@ function showMapCard(list) {
 }
 
 // ------------------------------------------------------------------ pantallas y botón "atrás"
-// Cada pantalla abierta (ficha, plan, mis planes) añade una entrada al historial: el botón atrás del móvil la cierra.
+// Pantallas apiladas (ficha, plan, visor). El botón "atrás" del móvil cierra lo último abierto;
+// después vuelve a la pestaña Carreras, limpia la búsqueda y solo sale de la app con una segunda pulsación.
 const STACK = [];
-function pushScreen(name, close) { STACK.push({ name, close }); history.pushState({ s: name }, ""); }
-function popScreen(name) { // cierre desde un botón de la app
+function pushScreen(name, close) { STACK.push({ name, close }); }
+function popScreen(name) {
   const i = STACK.map(x => x.name).lastIndexOf(name);
-  if (i < 0) return;
-  STACK.splice(i, 1)[0].close();
-  if (history.state?.s === name) { ignorePop = true; history.back(); }
+  if (i >= 0) STACK.splice(i, 1)[0].close();
 }
-let ignorePop = false;
-addEventListener("popstate", () => {
-  if (ignorePop) { ignorePop = false; return; }
-  const top = STACK.pop(); if (top) top.close();
-});
+let lastBack = 0;
+function handleBack() {
+  if (!$("#viewer")?.hidden && $("#viewer")) { closeViewer(); return true; }
+  if (!$("#filterSheet").hidden) { openFilterSheet(false); return true; }
+  if (STACK.length) { STACK.pop().close(); return true; }
+  if ($("#mapCard") && !$("#mapCard").hidden) { $("#mapCard").hidden = true; selId = null; drawMarkers(); return true; }
+  const tab = $(".tabbar button.on")?.dataset.view;
+  if (tab && tab !== "list") { setTab("list"); return true; }
+  if (F.q) { F.q = ""; $("#q").value = ""; apply(); return true; }
+  if (Date.now() - lastBack < 2000) return false;
+  lastBack = Date.now(); toast("Pulsa atrás otra vez para salir"); return true;
+}
+async function initDeepLinks() { // la app se abre desde un enlace de plan (correrdormircomer://plan?c=… o la web)
+  const cap = window.Capacitor?.Plugins?.App;
+  if (!window.CDC_APP || !cap) return;
+  const open = async u => { if (!u || !/[?&](c|plan)=/.test(u)) return; try { openSharedPlan(await decodePlan(u)); } catch { toast("El enlace del plan está incompleto o dañado"); } };
+  cap.addListener("appUrlOpen", e => open(e.url));
+  try { const l = await cap.getLaunchUrl(); if (l?.url) setTimeout(() => open(l.url), 800); } catch { /* sin enlace */ }
+}
+function initBack() {
+  const cap = window.Capacitor?.Plugins?.App;
+  if (window.CDC_APP && cap) { // Android nativo
+    cap.addListener("backButton", () => { if (!handleBack()) cap.exitApp(); });
+    return;
+  }
+  // navegador / PWA instalada: una entrada "guardia" en el historial que se repone mientras haya algo que cerrar
+  history.pushState({ cdc: 1 }, "");
+  addEventListener("popstate", () => { if (handleBack()) history.pushState({ cdc: 1 }, ""); else history.back(); });
+}
 
 // ------------------------------------------------------------------ ficha
 let rmap = null;
@@ -488,7 +520,7 @@ function openRace(id) {
     <div class="bar"><button class="x" id="closeSheet" type="button" aria-label="Volver">←</button><h2>${fmtShort(r.date)}</h2>
       <button class="fav${favs.has(r.id) ? " on" : ""}" data-fav="${r.id}" type="button" aria-label="Favorita">${favs.has(r.id) ? "♥" : "♡"}</button></div>
     <div class="screen-body">
-      ${r.img ? `<img class="hero-img" src="${esc(r.img)}" alt="" loading="lazy" onerror="this.remove()">` : ""}
+      ${r.img ? `<button class="poster" id="posterBtn" type="button" aria-label="Ver el cartel a pantalla completa"><img class="hero-img" src="${esc(r.img)}" alt="Cartel de la carrera" onerror="this.closest('.poster').remove()"><span class="zoom-hint"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4M11 8v6M8 11h6"/></svg>Ampliar</span></button>` : ""}
       <span class="pill ${r.surface === "trail" ? "trail" : "road"}">${surf}</span>
       <h1 class="race-title">${esc(r.name)}</h1>
       <dl class="facts">
@@ -512,6 +544,7 @@ function openRace(id) {
   sheet.hidden = false; sheet.scrollTop = 0;
   if (!STACK.some(x => x.name === "race")) pushScreen("race", hideRace);
   $("#closeSheet").onclick = closeSheet;
+  if ($("#posterBtn")) $("#posterBtn").onclick = () => openViewer(bigImage(r.img), r.name, r.img);
   $("#planIt").onclick = () => openPlan(newPlan(r));
   sheet.querySelector("[data-fav]").onclick = e => { toggleFav(r.id); };
   if (r.lat && window.L) {
@@ -520,6 +553,56 @@ function openRace(id) {
     baseLayers(rmap);
     L.marker([r.lat, r.lon], { icon: L.divIcon({ className: "", html: `<div class="pin run">${ICON_RUN}</div>`, iconSize: [30, 30], iconAnchor: [15, 30] }) }).addTo(rmap);
   }
+}
+// ------------------------------------------------------------------ visor de cartel (pellizcar, doble toque, arrastrar)
+const bigImage = u => (u || "").replace(/-\d+x\d+x\d+(\.\w+)(\?.*)?$/, "$1"); // runnea: miniatura → original
+function openViewer(src, title, fallback) {
+  let v = $("#viewer");
+  if (!v) {
+    v = document.createElement("div"); v.id = "viewer"; v.className = "viewer";
+    v.innerHTML = `<div class="viewer-bar"><span id="viewerTitle"></span><button class="x" type="button" id="viewerClose" aria-label="Cerrar">✕</button></div><div class="viewer-stage"><img id="viewerImg" alt=""></div><p class="viewer-hint">Pellizca para ampliar · doble toque para zoom</p>`;
+    $("#app").appendChild(v);
+    $("#viewerClose").onclick = closeViewer;
+    bindPinch(v.querySelector(".viewer-stage"), $("#viewerImg"));
+  }
+  const img = $("#viewerImg");
+  img.onerror = () => { if (fallback && img.src !== fallback) img.src = fallback; }; // si no hay versión grande, la miniatura
+  img.src = src; $("#viewerTitle").textContent = title || ""; img._reset?.();
+  v.hidden = false;
+}
+function closeViewer() { const v = $("#viewer"); if (v) v.hidden = true; }
+function bindPinch(stage, img) {
+  let sc = 1, tx = 0, ty = 0, pts = new Map(), start = null, lastTap = 0;
+  const apply = () => { img.style.transform = `translate(${tx}px, ${ty}px) scale(${sc})`; };
+  const clamp = () => { if (sc <= 1) { sc = 1; tx = 0; ty = 0; } apply(); };
+  img._reset = () => { sc = 1; tx = 0; ty = 0; apply(); };
+  stage.addEventListener("pointerdown", e => {
+    stage.setPointerCapture(e.pointerId); pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pts.size === 1) {
+      const now = Date.now();
+      if (now - lastTap < 300) { // doble toque: acerca al punto tocado o vuelve
+        if (sc > 1) { sc = 1; tx = 0; ty = 0; } else { const r = stage.getBoundingClientRect(); sc = 2.6; tx = (r.width / 2 - (e.clientX - r.left)) * 1.6; ty = (r.height / 2 - (e.clientY - r.top)) * 1.6; }
+        apply(); lastTap = 0; return;
+      }
+      lastTap = now;
+    }
+    const [a, b] = [...pts.values()];
+    start = { sc, tx, ty, a: { ...a }, d: b ? Math.hypot(a.x - b.x, a.y - b.y) : 0, m: b ? { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } : a };
+  });
+  stage.addEventListener("pointermove", e => {
+    if (!pts.has(e.pointerId) || !start) return;
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const [a, b] = [...pts.values()];
+    if (b && start.d) {
+      const m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+      sc = Math.min(6, Math.max(1, start.sc * Math.hypot(a.x - b.x, a.y - b.y) / start.d));
+      tx = start.tx + (m.x - start.m.x); ty = start.ty + (m.y - start.m.y);
+    } else if (sc > 1) { tx = start.tx + (a.x - start.a.x); ty = start.ty + (a.y - start.a.y); }
+    apply();
+  });
+  const up = e => { pts.delete(e.pointerId); clamp(); const [a, b] = [...pts.values()]; start = a ? { sc, tx, ty, a: { ...a }, d: 0, m: a } : null; };
+  stage.addEventListener("pointerup", up); stage.addEventListener("pointercancel", up);
+  stage.addEventListener("wheel", e => { e.preventDefault(); sc = Math.min(6, Math.max(1, sc * (e.deltaY < 0 ? 1.15 : 0.87))); clamp(); }, { passive: false });
 }
 function hideRace() { $("#sheet").hidden = true; if (rmap) { rmap.remove(); rmap = null; } }
 function closeSheet() { popScreen("race"); }
@@ -674,9 +757,12 @@ function renderPlan() {
       </section>
       <section class="panel share-box" id="shareBox">
         <div class="panel-h"><span class="tag run"></span><h2>Compartir</h2></div>
-        <p class="small muted" style="margin:0">Todo el plan (carrera, alojamiento, comidas, itinerario, mochila y notas) va dentro del enlace. Quien lo abra puede guardarlo como suyo.</p>
-        <div class="share-row">
-          <button class="btn primary wide" id="shSend" type="button">Enviar plan (WhatsApp, Telegram…)</button>
+        <p class="small muted" style="margin:0 0 10px">Se comparte una ficha en imagen con lo importante y un enlace que lleva el plan entero (carrera, alojamiento, comidas, itinerario, mochila y notas) para guardarlo en la app.</p>
+        <button class="card-preview-btn" id="cardPreviewBtn" type="button" aria-label="Ver ficha a pantalla completa"><img id="cardPreview" class="card-preview" alt="Ficha resumen del plan"></button>
+        <div class="share-row" style="margin-top:10px">
+          <button class="btn primary wide" id="shCard" type="button">Compartir ficha (imagen + enlace)</button>
+          <button class="btn ghost small" id="shSend" type="button">Enviar solo texto</button>
+          <button class="btn ghost small" id="shSaveImg" type="button">Guardar imagen</button>
           <button class="btn ghost small" id="shLink" type="button">Copiar enlace</button>
           <button class="btn ghost small" id="shText" type="button">Copiar resumen</button>
           <button class="btn ghost small" id="shIcs" type="button">Calendario (.ics)</button>
@@ -807,6 +893,9 @@ function bindPlan() {
   $$("[data-evdel]", v).forEach(b => b.onclick = () => { p.events.splice(+b.dataset.evdel, 1); commit(); });
   $("#shLink").onclick = async () => { const u = await planURL(p); copy(u, "Enlace copiado: pégalo en WhatsApp, Telegram o email"); };
   $("#shText").onclick = () => copy(planText(p), "Resumen copiado");
+  $("#shCard").onclick = () => shareCard(p);
+  $("#shSaveImg").onclick = async () => { const blob = await cardBlob(p); saveBlob(blob, `${slug(p.title)}.png`); };
+  $("#cardPreviewBtn").onclick = () => { const u = $("#cardPreview").src; if (u) openViewer(u, p.title); };
   $("#shIcs").onclick = () => downloadOrCopy(planICS(p), `${slug(p.title)}.ics`, "text/calendar");
   $("#shJson").onclick = () => downloadOrCopy(JSON.stringify(p, null, 2), `${slug(p.title)}.json`, "application/json");
   $("#pDelete").onclick = e => {
@@ -842,18 +931,48 @@ function drawPlanMap() {
 }
 
 // -------- Overpass (OpenStreetMap): alojamientos y restaurantes cercanos
-const OVERPASS = ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter", "https://overpass.private.coffee/api/interpreter", "https://maps.mail.ru/osm/tools/overpass/api/interpreter"];
-async function overpass(q) {
-  let lastErr;
-  for (const u of OVERPASS) {
+// Sitios cercanos (OpenStreetMap). Los servidores públicos de Overpass a veces van saturados:
+// se consultan todos a la vez y gana el primero; si ninguno responde, se usa Nominatim.
+const OVERPASS = ["https://overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter", "https://overpass.kumi.systems/api/interpreter"];
+function overpassOnce(u, q, signal) {
+  return fetch(`${u}?data=${encodeURIComponent(q)}`, { signal }).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(j => { if (!j.elements) throw new Error("vacío"); return j.elements; });
+}
+async function overpass(q, ms = 9000) {
+  const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), ms);
+  try { return await Promise.any(OVERPASS.map(u => overpassOnce(u, q, ctl.signal))); }
+  finally { clearTimeout(to); ctl.abort(); }
+}
+const NOMI_PHRASE = { hotel: "hotel", motel: "motel", hostel: "hostel", guest_house: "guest house", apartment: "apartment", chalet: "chalet",
+  camp_site: "camp site", caravan_site: "caravan site", alpine_hut: "alpine hut", wilderness_hut: "wilderness hut",
+  restaurant: "restaurant", cafe: "cafe", bakery: "bakery", fast_food: "fast food", bar: "bar" };
+let nomiLast = 0;
+async function nominatim(types, lat, lon, radiusM) {
+  const dLat = radiusM / 111000, dLon = radiusM / (111000 * Math.cos(lat * Math.PI / 180));
+  const vb = [lon - dLon, lat + dLat, lon + dLon, lat - dLat].map(x => x.toFixed(5)).join(",");
+  const out = [], seen = new Set();
+  for (const t of types.slice(0, 5)) {
+    const ph = NOMI_PHRASE[t]; if (!ph) continue;
+    const wait = 1100 - (Date.now() - nomiLast); if (wait > 0) await new Promise(r => setTimeout(r, wait)); // 1 petición/s
+    nomiLast = Date.now();
     try {
-      const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 20000);
-      const r = await fetch(u, { method: "POST", signal: ctl.signal, body: "data=" + encodeURIComponent(q), headers: { "Content-Type": "application/x-www-form-urlencoded" } }).finally(() => clearTimeout(to));
-      if (!r.ok) throw new Error(r.status);
-      return (await r.json()).elements || [];
-    } catch (e) { lastErr = e; }
+      const r = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&extratags=1&limit=40&bounded=1&viewbox=${vb}&q=${encodeURIComponent(ph)}`);
+      if (!r.ok) continue;
+      for (const x of await r.json()) {
+        if (seen.has(x.osm_id) || !types.includes(x.type)) continue;
+        seen.add(x.osm_id);
+        const a = x.address || {}, ex = x.extratags || {};
+        out.push({ lat: +x.lat, lon: +x.lon, tags: { name: x.name, [x.category]: x.type, "addr:street": a.road, "addr:housenumber": a.house_number,
+          "addr:city": a.city || a.town || a.village, website: ex.website || ex["contact:website"], cuisine: ex.cuisine, stars: ex.stars, phone: ex.phone } });
+      }
+    } catch { /* siguiente tipo */ }
   }
-  throw lastErr;
+  return out;
+}
+async function nearby(key, types, c, radiusM, max) {
+  const q = `[out:json][timeout:15];nwr["${key}"~"^(${types.join("|")})$"](around:${radiusM},${c.lat},${c.lon});out center tags ${max};`;
+  try { return { els: await overpass(q), src: "OpenStreetMap" }; }
+  catch { return { els: await nominatim(types, c.lat, c.lon, radiusM), src: "OpenStreetMap (Nominatim)" }; }
 }
 const TYPE_ES = { hotel: "Hotel", motel: "Motel", hostel: "Albergue", guest_house: "Hostal / pensión", apartment: "Apartamento", chalet: "Casa rural", camp_site: "Camping", caravan_site: "Área autocaravanas", alpine_hut: "Refugio", wilderness_hut: "Refugio libre", restaurant: "Restaurante", cafe: "Cafetería", fast_food: "Comida rápida", bar: "Bar", bakery: "Panadería" };
 function osmPlace(e, center) {
@@ -877,42 +996,46 @@ function showCandidates(list, cls) {
   const pts = list.filter(x => x.lat).map(x => [x.lat, x.lon]); if (P.race.lat) pts.push([P.race.lat, P.race.lon]);
   if (pts.length > 1) pmap.fitBounds(pts, { padding: [20, 20], maxZoom: 15 });
 }
+function coordsNote(c) {
+  return c.approx ? `<p class="small muted">Ojo: la ubicación de esta carrera es aproximada (centro de ${esc(c.city || c.province || "la zona")}).</p>` : "";
+}
 async function searchStay() {
   const r = P.race, box = $("#stayRes");
   if (!r.lat) { box.innerHTML = `<p class="small muted">Esta carrera no tiene coordenadas; usa los enlaces de Booking/Airbnb.</p>`; return; }
-  box.innerHTML = `<p class="small muted">Buscando en OpenStreetMap…</p>`;
-  const types = $("#stayType").value, R = $("#stayR").value;
-  const q = `[out:json][timeout:25];nwr["tourism"~"^(${types})$"](around:${R},${r.lat},${r.lon});out center tags 80;`;
-  try {
-    const list = (await overpass(q)).map(e => osmPlace(e, r)).filter(x => x.lat)
-      .sort((a, b) => (!a._t.name - !b._t.name) || a._d - b._d).slice(0, 40); // primero los que tienen nombre
-    box.innerHTML = resultsHTML(list, "sleep"); showCandidates(list, "sleep");
-  } catch {
-    box.innerHTML = `<p class="small muted">No se pudo consultar OpenStreetMap desde aquí. Usa los botones de Booking, Airbnb o Google.</p>`;
-  }
+  box.innerHTML = `<p class="small muted">Buscando alojamiento cerca de la salida…</p>`;
+  const types = $("#stayType").value.split("|"), R = +$("#stayR").value;
+  const { els, src } = await nearby("tourism", types, r, R, 80);
+  const list = els.map(e => osmPlace(e, r)).filter(x => x.lat)
+    .sort((a, b) => (!a._t.name - !b._t.name) || a._d - b._d).slice(0, 40); // primero los que tienen nombre
+  box.innerHTML = coordsNote(r) + (list.length ? `<p class="small muted">${list.length} resultados · ${src}</p>` : "") +
+    (list.length ? resultsHTML(list, "sleep") : `<p class="small muted">No encuentro alojamientos a ${R / 1000} km en OpenStreetMap. Prueba con 20 km o usa Booking, Airbnb o Google.</p>`);
+  showCandidates(list, "sleep");
 }
 async function searchEat(i) {
   const m = P.meals[i], c = P.stay?.lat ? P.stay : P.race, box = $(`[data-mres="${i}"]`);
   if (!c.lat) { box.innerHTML = `<p class="small muted">Sin coordenadas: usa el enlace de Google Maps.</p>`; return; }
-  box.innerHTML = `<p class="small muted">Buscando…</p>`;
-  const pref = PREFS[m.pref] || PREFS.any, amen = pref.amen || "restaurant";
-  const q = `[out:json][timeout:25];nwr["amenity"~"^(${amen})$"](around:2500,${c.lat},${c.lon});out center tags 150;`;
-  try {
-    let list = (await overpass(q)).map(e => osmPlace(e, c)).filter(x => x.lat && x._t.name);
-    const match = list.filter(x => pref.diet ? /yes|only/.test(x._t["diet:vegetarian"] || x._t["diet:vegan"] || "") || pref.re.test(x._t.cuisine || "") : pref.re.test(`${x._t.cuisine || ""} ${x._t.amenity} ${x._t.name}`));
-    list = (match.length >= 3 ? match : [...match, ...list.filter(x => !match.includes(x))]).sort((a, b) => a._d - b._d).slice(0, 30);
-    box.innerHTML = (match.length < 3 && list.length ? `<p class="small muted">Pocos sitios etiquetados así; te enseño también otros cercanos.</p>` : "") + resultsHTML(list, "eat", i);
-    showCandidates(list, "eat");
-  } catch {
-    box.innerHTML = `<p class="small muted">No se pudo consultar OpenStreetMap desde aquí. Usa el enlace de Google Maps.</p>`;
-  }
+  box.innerHTML = `<p class="small muted">Buscando sitios para comer cerca de ${P.stay?.lat ? "tu alojamiento" : "la salida"}…</p>`;
+  const pref = PREFS[m.pref] || PREFS.any, types = (pref.amen || "restaurant").split("|");
+  let { els, src } = await nearby("amenity", types, c, 2500, 150);
+  if (els.filter(e => e.tags?.name).length < 4) ({ els, src } = await nearby("amenity", types, c, 8000, 150)); // pueblo pequeño: amplía
+  let list = els.map(e => osmPlace(e, c)).filter(x => x.lat && x._t.name);
+  const match = list.filter(x => pref.diet ? /yes|only/.test(x._t["diet:vegetarian"] || x._t["diet:vegan"] || "") || pref.re.test(x._t.cuisine || "") : pref.re.test(`${x._t.cuisine || ""} ${x._t.amenity} ${x._t.name}`));
+  list = (match.length >= 3 ? match : [...match, ...list.filter(x => !match.includes(x))]).sort((a, b) => a._d - b._d).slice(0, 30);
+  box.innerHTML = coordsNote(c) + (list.length ? `<p class="small muted">${match.length < 3 ? "Pocos sitios etiquetados así; te enseño también otros cercanos. · " : ""}${src}</p>` + resultsHTML(list, "eat", i)
+    : `<p class="small muted">No encuentro sitios en OpenStreetMap aquí. Usa el enlace de Google Maps.</p>`);
+  showCandidates(list, "eat");
 }
 
 // ------------------------------------------------------------------ compartir
 const b64u = buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 const unb64u = s => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/")), c => c.charCodeAt(0));
+function defaultCheck(p) { return [...DEFAULT_CHECK, ...(p.race?.surface === "trail" ? TRAIL_CHECK : [])]; }
 async function encodePlan(p) {
   const { created, ...rest } = p;
+  const dc = defaultCheck(p);
+  if (rest.check?.length === dc.length && rest.check.every((c, i) => c.t === dc[i] && !c.d)) delete rest.check; // mochila por defecto: no viaja
+  rest.meals = rest.meals?.map(m => m.place?.url?.startsWith("https://www.google.com/maps/search/") ? { ...m, place: { ...m.place, url: "" } } : m);
+  if (rest.stay?.url?.startsWith("https://www.google.com/maps/search/")) rest.stay = { ...rest.stay, url: "" };
   const json = JSON.stringify(rest);
   if (window.CompressionStream) {
     const s = new Blob([json]).stream().pipeThrough(new CompressionStream("deflate-raw"));
@@ -921,13 +1044,14 @@ async function encodePlan(p) {
   return "j" + b64u(new TextEncoder().encode(json));
 }
 async function decodePlan(code) {
-  code = code.trim().replace(/^.*[?&#]plan=/, "").replace(/&.*$/, "");
+  code = decodeURIComponent(code.trim()).replace(/^.*[?&#](plan|c)=/, "").replace(/&.*$/, "");
   const kind = code[0], bytes = unb64u(code.slice(1));
   let json;
   if (kind === "z") { const s = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw")); json = await new Response(s).text(); }
   else json = new TextDecoder().decode(bytes);
   const p = JSON.parse(json);
   if (!p.race || !p.v) throw new Error("no es un plan");
+  if (!p.check) p.check = defaultCheck(p).map(t => ({ t, d: false }));
   return p;
 }
 // En la vista previa embebida (artifact) no hay URL propia que reciba ?plan=; se usa la pública si existe.
@@ -942,8 +1066,15 @@ async function planURL(p) {
   if ((EMBED || APP) && !PUBLIC_URL) return `Plan «${p.title}» de Correr·Dormir·Comer.\nÁbrelo en Mis planes → Importar y pega este código:\n${code}`;
   return `${baseURL()}?plan=${code}`;
 }
+let cardTimer;
 async function refreshShare() {
   if (!P) return;
+  clearTimeout(cardTimer);
+  cardTimer = setTimeout(async () => { // la ficha se regenera al cambiar el plan
+    if (!P || !$("#cardPreview")) return;
+    const blob = await cardBlob(P); const old = $("#cardPreview").src;
+    $("#cardPreview").src = URL.createObjectURL(blob); if (old.startsWith("blob:")) URL.revokeObjectURL(old);
+  }, 250);
   const code = await encodePlan(P), url = (EMBED || APP) && !PUBLIC_URL ? code : `${baseURL()}?plan=${code}`;
   const c = $("#planCode"); if (c) c.textContent = code;
   const q = $("#qr");
@@ -951,6 +1082,120 @@ async function refreshShare() {
     try { const qr = qrcode(0, "L"); qr.addData(url); qr.make(); q.innerHTML = qr.createSvgTag({ cellSize: 3, margin: 2, scalable: true }); }
     catch { q.innerHTML = `<p class="small" style="color:#333">Plan demasiado grande para QR; usa el enlace.</p>`; }
   }
+}
+// ------------------------------------------------------------------ ficha resumen en imagen
+const CARD = { bg: "#EEF1EF", ink: "#14201A", muted: "#5B6961", line: "#D8DFDB", white: "#FFFFFF", run: "#E8491F", sleep: "#5A55D2", eat: "#C9800F", road: "#2A67D6", trail: "#2C8752" };
+function wrap(ctx, text, maxW, maxLines = 3) {
+  const words = String(text || "").split(/\s+/), lines = [];
+  let cur = "";
+  for (const w of words) {
+    const t = cur ? cur + " " + w : w;
+    if (ctx.measureText(t).width <= maxW || !cur) cur = t; else { lines.push(cur); cur = w; }
+  }
+  if (cur) lines.push(cur);
+  if (lines.length > maxLines) { lines.length = maxLines; let l = lines[maxLines - 1]; while (ctx.measureText(l + "…").width > maxW && l.length) l = l.slice(0, -1); lines[maxLines - 1] = l + "…"; }
+  return lines;
+}
+function rrect(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
+async function cardBlob(p) {
+  try { await Promise.all(["800 76px 'Barlow Condensed'", "700 40px Figtree", "400 28px Figtree", "800 26px Figtree"].map(f => document.fonts.load(f))); } catch { /* sin fuentes: las del sistema */ }
+  const r = p.race, W = 1080, PAD = 64, D = pd(r.date), C = CARD;
+  const url = await planURL(p);
+  const rows = [];
+  rows.push({ c: C.run, k: "SALIDA", v: r.time ? `${r.time} h` : "Hora por confirmar", s: fmtDate(r.date) });
+  rows.push({ c: C.run, k: "LUGAR", v: [r.city, r.province].filter(Boolean).join(", ") || "Por confirmar", s: p.chosen ? `Corro ${fmtDist(p.chosen)}${r.dist.length > 1 ? " · distancias: " + r.dist.map(fmtDist).join(", ") : ""}` : r.dist.map(fmtDist).join(", ") });
+  const n = nightsOf(p);
+  rows.push({ c: C.sleep, k: "DORMIR", v: p.stay ? p.stay.name : n ? "Alojamiento por elegir" : "Ida y vuelta en el día", s: p.stay ? [n ? `${n} noche${n > 1 ? "s" : ""}: ${fmtShort(p.arrive)} → ${fmtShort(p.leave)}` : "", p.stay.addr, p.stay.price ? p.stay.price + " €" : ""].filter(Boolean).join(" · ") : n ? `${fmtShort(p.arrive)} → ${fmtShort(p.leave)}` : "" });
+  const meals = p.meals.filter(m => m.place);
+  if (meals.length) meals.forEach((m, i) => rows.push({ c: C.eat, k: i ? "" : "COMER", v: m.place.name, s: `${m.slot} · ${fmtShort(m.day)} ${m.time}${m.place.addr ? " · " + m.place.addr : ""}` }));
+  else rows.push({ c: C.eat, k: "COMER", v: "Restaurantes por elegir", s: p.meals.map(m => m.slot).join(" · ") });
+  if (p.people > 1) rows.push({ c: C.muted, k: "GRUPO", v: `${p.people} personas`, s: p.origin ? `Salimos desde ${p.origin}` : "" });
+
+  // medir alto
+  const cv = document.createElement("canvas"), ctx = cv.getContext("2d");
+  ctx.font = "800 76px 'Barlow Condensed', 'Arial Narrow', sans-serif";
+  const titleLines = wrap(ctx, r.name, W - PAD * 2 - 250, 3);
+  const ROW_H = 150, QR_H = 540;
+  const H = 150 + 90 + Math.max(250, 40 + titleLines.length * 78 + 70) + 40 + rows.length * ROW_H + 40 + QR_H + 90;
+  cv.width = W; cv.height = H;
+  // fondo y cabecera
+  ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = C.ink; ctx.fillRect(0, 0, W, 150);
+  [C.run, C.sleep, C.eat].forEach((c, i) => { ctx.fillStyle = c; rrect(ctx, PAD + i * 30, 44, 22, 62, 6); ctx.fill(); });
+  ctx.fillStyle = "#fff"; ctx.font = "800 46px 'Barlow Condensed', 'Arial Narrow', sans-serif"; ctx.textBaseline = "middle";
+  ctx.fillText("CORRER · DORMIR · COMER", PAD + 110, 76);
+  // nombre del plan
+  ctx.fillStyle = C.muted; ctx.font = "700 30px Figtree, sans-serif"; ctx.fillText(wrap(ctx, p.title.toUpperCase(), W - PAD * 2, 1)[0], PAD, 150 + 48);
+  // bloque carrera con dorsal
+  let y = 150 + 90;
+  const blockH = Math.max(250, 40 + titleLines.length * 78 + 70);
+  ctx.fillStyle = C.white; rrect(ctx, PAD, y, W - PAD * 2, blockH, 28); ctx.fill();
+  const bx = PAD + 30, by = y + 30, bw = 190, bh = blockH - 60;
+  ctx.fillStyle = "#F4F6F5"; rrect(ctx, bx, by, bw, bh, 16); ctx.fill();
+  ctx.fillStyle = r.surface === "trail" ? C.trail : C.road; rrect(ctx, bx, by, bw, 16, [16, 16, 0, 0]); ctx.fill();
+  ctx.fillStyle = C.bg; [bx + 22, bx + bw - 22].forEach(cx => { ctx.beginPath(); ctx.arc(cx, by + 34, 8, 0, 7); ctx.fill(); });
+  ctx.fillStyle = C.ink; ctx.textAlign = "center"; ctx.font = "800 110px 'Barlow Condensed', sans-serif"; ctx.fillText(String(D.getDate()), bx + bw / 2, by + bh / 2 - 6);
+  ctx.font = "700 30px Figtree, sans-serif"; ctx.fillStyle = C.muted;
+  ctx.fillText(`${DAYS[D.getDay()].toUpperCase()} · ${MONTHS[D.getMonth()].toUpperCase()}`, bx + bw / 2, by + bh / 2 + 62);
+  ctx.fillText(String(D.getFullYear()), bx + bw / 2, by + bh - 26); ctx.textAlign = "left";
+  const tx = bx + bw + 36;
+  ctx.fillStyle = r.surface === "trail" ? C.trail : C.road; ctx.font = "800 26px Figtree, sans-serif";
+  ctx.fillText(r.surface === "trail" ? "TRAIL / MONTAÑA" : "ASFALTO", tx, y + 54);
+  ctx.fillStyle = C.ink; ctx.font = "800 76px 'Barlow Condensed', 'Arial Narrow', sans-serif";
+  titleLines.forEach((l, i) => ctx.fillText(l, tx, y + 110 + i * 78));
+  y += blockH + 40;
+  // filas
+  for (const row of rows) {
+    ctx.fillStyle = C.white; rrect(ctx, PAD, y, W - PAD * 2, ROW_H - 16, 22); ctx.fill();
+    ctx.fillStyle = row.c; rrect(ctx, PAD, y, 14, ROW_H - 16, [22, 0, 0, 22]); ctx.fill();
+    const hasK = !!row.k, top = hasK ? 0 : -16;
+    if (hasK) { ctx.fillStyle = row.c; ctx.font = "800 26px Figtree, sans-serif"; ctx.fillText(row.k, PAD + 40, y + 36); }
+    ctx.fillStyle = C.ink; ctx.font = "700 40px Figtree, sans-serif";
+    ctx.fillText(wrap(ctx, row.v, W - PAD * 2 - 80, 1)[0] || "", PAD + 40, y + 80 + top);
+    if (row.s) { ctx.fillStyle = C.muted; ctx.font = "400 28px Figtree, sans-serif"; ctx.fillText(wrap(ctx, row.s, W - PAD * 2 - 80, 1)[0], PAD + 40, y + 118 + top); }
+    y += ROW_H;
+  }
+  // QR + enlace
+  y += 24;
+  ctx.fillStyle = C.ink; rrect(ctx, PAD, y, W - PAD * 2, QR_H, 28); ctx.fill();
+  const qs = QR_H - 70, qx = W - PAD - 35 - qs, qy = y + 35;
+  ctx.fillStyle = "#fff"; rrect(ctx, qx, qy, qs, qs, 14); ctx.fill();
+  if (window.qrcode && url.startsWith("http")) {
+    try {
+      const qr = qrcode(0, "L"); qr.addData(url); qr.make();
+      const n = qr.getModuleCount(), cell = Math.floor((qs - 24) / n), off = Math.floor((qs - cell * n) / 2); // módulos enteros: nítido
+      ctx.fillStyle = "#000";
+      for (let a = 0; a < n; a++) for (let b = 0; b < n; b++) if (qr.isDark(a, b)) ctx.fillRect(qx + off + b * cell, qy + off + a * cell, cell, cell);
+    } catch { /* plan demasiado grande para QR */ }
+  }
+  ctx.fillStyle = "#fff"; ctx.font = "800 44px 'Barlow Condensed', sans-serif";
+  wrap(ctx, "GUARDA ESTE PLAN EN TU APP", qx - PAD - 60, 3).forEach((l, i) => ctx.fillText(l, PAD + 36, y + 80 + i * 48));
+  ctx.fillStyle = "#C9D3CE"; ctx.font = "400 28px Figtree, sans-serif";
+  wrap(ctx, "Escanea el código o abre el enlace del mensaje: se abre el plan completo y puedes guardarlo en Correr·Dormir·Comer.", qx - PAD - 70, 7).forEach((l, i) => ctx.fillText(l, PAD + 36, y + 250 + i * 36));
+  // pie
+  ctx.fillStyle = C.muted; ctx.font = "400 24px Figtree, sans-serif"; ctx.textAlign = "center";
+  ctx.fillText(r.web ? `Web oficial: ${r.web.replace(/^https?:\/\//, "").slice(0, 60)}` : "Comprueba horarios en la web oficial de la carrera", W / 2, H - 44);
+  return new Promise(res => cv.toBlob(res, "image/png"));
+}
+function saveBlob(blob, name) {
+  if (APP && CAP.Filesystem && CAP.Share) return shareFileBlob(blob, name, "Guardar o enviar la ficha");
+  if (EMBED) { toast("Mantén pulsada la ficha para guardarla"); openViewer(URL.createObjectURL(blob), name); return; }
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  toast("Imagen guardada");
+}
+async function shareFileBlob(blob, name, title, text) {
+  const b64 = await new Promise(res => { const fr = new FileReader(); fr.onload = () => res(String(fr.result).split(",")[1]); fr.readAsDataURL(blob); });
+  const f = await CAP.Filesystem.writeFile({ path: name, data: b64, directory: "CACHE" });
+  try { await CAP.Share.share({ title, text, files: [f.uri], dialogTitle: title }); } catch { /* cancelado */ }
+}
+async function shareCard(p) {
+  toast("Preparando la ficha…");
+  const blob = await cardBlob(p), url = await planURL(p), name = `${slug(p.title)}.png`;
+  const text = `${planText(p)}\n\n👉 Guarda el plan en tu app: ${url}`;
+  if (APP && CAP.Filesystem && CAP.Share) return shareFileBlob(blob, name, "Compartir plan", text);
+  const file = new File([blob], name, { type: "image/png" });
+  if (!EMBED && navigator.canShare?.({ files: [file] })) { try { await navigator.share({ files: [file], text, title: p.title }); return; } catch { return; } }
+  saveBlob(blob, name); copy(text, "Ficha lista y texto con enlace copiado");
 }
 function planText(p) {
   const r = p.race, L2 = [];
@@ -1012,6 +1257,13 @@ function openSharedPlan(p) {
   b.className = "btn primary small"; b.type = "button"; b.textContent = exists ? "Actualizar" : "Guardar";
   b.onclick = () => { savePlan(P); b.remove(); toast("Plan guardado en «Mis planes»"); };
   bar.insertBefore(b, $("#pvShare"));
+  if (!APP && /Android/i.test(navigator.userAgent)) { // web en Android: pasar el plan a la app instalada
+    encodePlan(p).then(code => {
+      const a = document.createElement("a"); a.className = "btn ghost small"; a.textContent = "Abrir en la app";
+      a.href = `intent://plan?c=${code}#Intent;scheme=correrdormircomer;package=es.correrdormircomer.app;S.browser_fallback_url=${encodeURIComponent(location.href)};end`;
+      bar.insertBefore(a, b);
+    });
+  }
 }
 
 // ------------------------------------------------------------------ mis planes
@@ -1058,7 +1310,8 @@ function init() {
   $("#brandLink").onclick = e => { e.preventDefault(); setTab("list"); $("#viewList").scrollTop = 0; };
   F.fav = false;
   $$(".tabbar button").forEach(b => b.onclick = () => setTab(b.dataset.view));
-  document.addEventListener("keydown", e => { if (e.key === "Escape") { if (!$("#filterSheet").hidden) openFilterSheet(false); else if (STACK.length) history.back(); } });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") handleBack(); });
+  initBack(); initDeepLinks();
   if (window.CDC_APP) document.addEventListener("click", e => { // Android: enlaces externos en el navegador del sistema
     const a = e.target.closest("a[href^='http']"); if (!a) return;
     const P = window.Capacitor?.Plugins || {};

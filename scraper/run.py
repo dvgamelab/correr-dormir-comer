@@ -8,6 +8,7 @@ Escribe web/data/races.json (consumido por la app) y data/raw/<fuente>.json.
 import argparse
 import datetime as dt
 import hashlib
+import html
 import logging
 import os
 import re
@@ -460,8 +461,8 @@ def merge(c):
         "dist": [round(d, 2) for d in dists], "surface": surface,
         "cats": categories(dists, surface),
         "elev": next((x["elevation"] for x in c if x.get("elevation")), None),
-        "kind": first("kind"), "web": first("website"), "reg": first("registration"),
-        "img": first("image"), "desc": first("description")[:300], "src": srcs,
+        "kind": first("kind"), "web": html.unescape(first("website")), "reg": html.unescape(first("registration")),
+        "img": html.unescape(first("image")), "desc": first("description")[:300], "src": srcs,
     }
     return {k: v for k, v in out.items() if v not in ("", None, [], False)}
 

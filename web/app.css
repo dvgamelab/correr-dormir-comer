@@ -267,3 +267,20 @@ input[type=date],input[type=time]{min-width:0;max-width:100%}
 .card.near{background:var(--surface-2);border-style:dashed}
 .card .away{font-family:var(--display);font-weight:800;font-size:14px;color:var(--accent-ink);background:var(--accent);border-radius:5px;padding:0 6px}
 .card.near .away{background:var(--ink);color:var(--bg)}
+
+/* cartel ampliable */
+.poster{position:relative;display:block;width:100%;padding:0;border:0;background:none;cursor:zoom-in;margin-bottom:10px}
+.poster .hero-img{margin:0;max-height:260px}
+.zoom-hint{position:absolute;right:8px;bottom:8px;display:inline-flex;align-items:center;gap:4px;background:rgba(0,0,0,.6);color:#fff;font-size:12px;font-weight:700;border-radius:999px;padding:4px 10px}
+.zoom-hint svg{width:14px;height:14px}
+.viewer{position:absolute;inset:0;z-index:80;background:#000;display:grid;grid-template-rows:auto 1fr auto;touch-action:none}
+.viewer-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:calc(8px + var(--safe-t)) 12px 8px;color:#fff;font-weight:700}
+.viewer-bar span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.viewer-bar .x{background:rgba(255,255,255,.15);border-color:transparent;color:#fff}
+.viewer-stage{position:relative;overflow:hidden;display:grid;place-items:center;touch-action:none}
+.viewer-stage img{max-width:100%;max-height:100%;object-fit:contain;transform-origin:center;will-change:transform;user-select:none;-webkit-user-drag:none}
+.viewer-hint{margin:0;padding:8px 12px calc(10px + var(--safe-b));color:rgba(255,255,255,.7);font-size:12px;text-align:center}
+
+/* vista previa de la ficha compartible */
+.card-preview-btn{display:block;width:100%;padding:0;border:0;background:none;cursor:zoom-in}
+.card-preview{display:block;width:100%;border-radius:12px;border:1px solid var(--line);background:var(--surface-2);min-height:120px}

@@ -23,6 +23,21 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- enlaces de planes compartidos: correrdormircomer://plan?c=… -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="correrdormircomer" android:host="plan" />
+            </intent-filter>
+            <!-- y los de la web publicada (Android permite elegir abrirlos con la app) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="dvgamelab.github.io" android:pathPrefix="/correr-dormir-comer" />
+            </intent-filter>
+
         </activity>
 
         <provider

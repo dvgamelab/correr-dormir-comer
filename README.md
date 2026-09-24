@@ -17,6 +17,10 @@ Proyecto personal, sin monetización.
 - **Cerca de [municipio]**: las de municipios cercanos, **ordenadas por distancia**, en gris con borde discontinuo y la distancia destacada ("a 4,9 km"). El radio se elige entre 10, 20, 30, 50 y 100 km.
 - Si hay varios municipios con ese nombre (Villanueva…), se ofrece cambiar de provincia. En el mapa se dibujan el municipio y el radio.
 
+**Cartel ampliable.** En la ficha de la carrera, al tocar el cartel se abre a pantalla completa: se pellizca para ampliar, doble toque para hacer zoom y se arrastra para moverlo.
+
+**Botón atrás del móvil.** Cierra lo último que hay abierto: visor, filtros, plan, ficha, panel del mapa. Después vuelve a la pestaña Carreras y borra la búsqueda. Solo sale de la app si lo pulsas dos veces seguidas.
+
 **Mapa.** Al tocar un punto aparece la carrera en un panel inferior. Si en ese sitio hay varias, salen todas en lista. Al tocar una, se abre su ficha.
 
 **Explorar**
@@ -35,7 +39,14 @@ Proyecto personal, sin monetización.
 - Mapa del plan con la salida, el alojamiento y los restaurantes.
 
 **Compartir**
-- **Enlace** que lleva el plan completo comprimido dentro (`?plan=…`). No hace falta servidor ni cuenta. Quien lo abre lo ve y puede guardarlo en sus planes.
+- **Ficha en imagen**, generada automáticamente (PNG 1080 px), con:
+  - fecha como un dorsal;
+  - nombre de la carrera, hora de salida, lugar y distancia;
+  - alojamiento elegido con las noches;
+  - restaurantes con hora;
+  - un **QR** con el plan completo.
+  Se comparte con el menú del móvil (WhatsApp, Telegram…) junto a un texto con el enlace. También se puede guardar en la galería.
+- **Enlace** que lleva el plan completo comprimido dentro (`?plan=…`). No hace falta servidor ni cuenta. Quien lo abre lo ve y puede guardarlo en sus planes. En Android, la web ofrece **"Abrir en la app"**, que pasa el plan a la APK (`correrdormircomer://plan?c=…`).
 - Código QR, resumen en texto para WhatsApp o Telegram, calendario `.ics` con todos los eventos y exportar/importar en JSON.
 
 Funciona como PWA: se puede instalar en el móvil y usar sin conexión con los datos de la última visita.
@@ -119,5 +130,7 @@ tools/build_artifact.py  versión para vista previa en Claude
 
 ## Límites conocidos
 - Las carreras sin coordenadas en la fuente pueden quedar en el centro de la provincia hasta que el geocoding las resuelva (mapa: punto gris discontinuo).
+- Alojamiento y restaurantes: se pregunta a la vez a tres servidores de Overpass y, si ninguno responde en 9 s, a Nominatim. Todos son datos de OpenStreetMap: aparece lo que esté etiquetado allí.
+- Wallet: Google Wallet y Apple Wallet solo aceptan pases firmados con una cuenta de emisor (Google Pay & Wallet Console / Apple Developer). Mientras no haya una, el plan se guarda como imagen, en el calendario (`.ics`) o en la app con el enlace.
 - Las sugerencias de alojamiento y restaurantes dependen de lo etiquetado en OpenStreetMap. Para precios y disponibilidad están los enlaces a Booking, Airbnb y Google.
 - Revisa siempre fecha, hora y recorrido en la web oficial.
