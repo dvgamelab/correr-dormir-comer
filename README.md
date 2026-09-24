@@ -12,6 +12,13 @@ Proyecto personal, sin monetización.
 - Chips deslizables: este finde, asfalto/trail, 5K, 10K, media, maratón, ultra.
 - Botón **Filtros** (hoja inferior): fechas, comunidad, provincia, cerca de un pueblo o de **tu ubicación GPS**, radio.
 
+**Buscar por municipio.** Si escribes el nombre de un municipio (vale cualquiera de los 8.155 de España, aunque no tenga carreras), la lista se divide en dos:
+- **En [municipio]**: las carreras de ese municipio, por fecha, con barra naranja.
+- **Cerca de [municipio]**: las de municipios cercanos, **ordenadas por distancia**, en gris con borde discontinuo y la distancia destacada ("a 4,9 km"). El radio se elige entre 10, 20, 30, 50 y 100 km.
+- Si hay varios municipios con ese nombre (Villanueva…), se ofrece cambiar de provincia. En el mapa se dibujan el municipio y el radio.
+
+**Mapa.** Al tocar un punto aparece la carrera en un panel inferior. Si en ese sitio hay varias, salen todas en lista. Al tocar una, se abre su ficha.
+
 **Explorar**
 - Lista agrupada por fin de semana ("Este finde", "Próximo finde"…) junto a un mapa de España con todas las carreras.
 - Filtros: superficie (asfalto/trail), distancia (5K, 10K, media, maratón, ultra, otras), fecha (este finde, próximo, 30 días, 3 meses o fechas a medida), comunidad autónoma, "cerca de" un pueblo con radio (25–200 km), texto libre y favoritas.
@@ -98,6 +105,7 @@ scraper/
 web/                app estática sin build (HTML + CSS + JS + Leaflet)
   data/races.json   datos generados
   data/spain.geo.json  provincias (IGN vía es-atlas) para el mapa sin conexión
+  data/municipios.json 8.155 municipios con su centro (IGN vía es-atlas) para buscar "cerca de"
 mobile/             app Android (Capacitor): prepare-web.mjs copia web/ en modo app
 tools/build_artifact.py  versión para vista previa en Claude
 .github/workflows/weekly.yml  cron semanal + despliegue en Pages

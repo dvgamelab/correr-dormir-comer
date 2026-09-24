@@ -18,6 +18,6 @@ html = html.replace('<script src="app.js"></script>', f'<script>window.CDC_EMBED
 shutil.rmtree(OUT, ignore_errors=True)
 os.makedirs(os.path.join(OUT, "data"))
 open(os.path.join(OUT, "index.html"), "w", encoding="utf-8").write(html.strip() + "\n")
-for f in ("app.js", "data/races.json", "data/spain.geo.json"):
+for f in ("app.js", "data/races.json", "data/spain.geo.json", "data/municipios.json"):
     shutil.copy(os.path.join(WEB, f), os.path.join(OUT, f))
 print("OK →", OUT)

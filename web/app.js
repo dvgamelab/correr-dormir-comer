@@ -47,7 +47,44 @@ const F = { q: "", surf: new Set(), cats: new Set(), when: "all", from: "", to: 
 F.surf = new Set(F.surf || []); F.cats = new Set(F.cats || []);
 let favs = new Set(store.get("favs", []));
 let plans = store.get("plans", {});
-let filtered = [], shown = 0, selId = null;
+let filtered = [], shown = 0, selId = null, SEARCH = null;
+const PLACES = new Map(); // nombre plegado → [{name, lat, lon, prov}]
+const MUNI = new Set();   // nombres plegados que son municipios (no barrios)
+function addPlace(name, lat, lon, prov, muni = false) {
+  const k = fold(name).replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
+  if (!k || lat == null) return;
+  const arr = PLACES.get(k) || [];
+  const i = arr.findIndex(x => haversine(x.lat, x.lon, lat, lon) < 8);
+  const it = { name, lat, lon, prov, key: k, muni };
+  if (i < 0) arr.push(it);
+  else if (muni && !arr[i].muni) arr[i] = it; // el centro oficial del municipio manda sobre el punto de una carrera
+  PLACES.set(k, arr);
+}
+async function loadPlaces() {
+  try {
+    const m = await (await fetch("data/municipios.json")).json();
+    for (const [n, la, lo, pr] of m) {
+      const variants = new Set([n, ...n.split("/")]);
+      for (const v of [...variants]) { const mm = v.match(/^(.*), (el|la|los|las|l'|lo|o|a|os|as|es|sa|ses)$/i); if (mm) variants.add(`${mm[2]} ${mm[1]}`); }
+      for (const v of variants) { addPlace(v.trim(), la, lo, pr, true); MUNI.add(fold(v.trim()).replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim()); }
+    }
+    $("#towns").innerHTML = m.map(x => `<option value="${esc(x[0].split("/")[0])}">`).join("");
+  } catch { /* sin municipios: se usan los pueblos de las carreras */ }
+  if (F.q) apply();
+}
+function findPlace(q) {
+  const k = fold(q).replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
+  if (k.length < 3) return null;
+  const c = PLACES.get(k);
+  if (!c?.length) return null;
+  if (c.length === 1) return { ...c[0], alts: [] };
+  // mismo nombre en varias provincias: se elige la del filtro de provincia/comunidad o la que tiene más carreras cerca
+  const score = x => (F.prov && x.prov === F.prov ? 1e6 : 0) + RACES.filter(r => r.lat && haversine(x.lat, x.lon, r.lat, r.lon) < 15).length;
+  const sorted = [...c].sort((a, b) => score(b) - score(a));
+  const pick = sorted.find(x => x.prov === SEARCH_PROV) || sorted[0];
+  return { ...pick, alts: sorted.filter(x => x !== pick) };
+}
+let SEARCH_PROV = "";
 const PAGE = 120;
 
 function saveFilters() { store.set("filters", { ...F, surf: [...F.surf], cats: [...F.cats], near: null }); }
@@ -77,10 +114,12 @@ async function load() {
   for (const r of RACES) {
     BYID.set(r.id, r);
     r._s = fold(`${r.name} ${r.city || ""} ${r.province || ""} ${r.ccaa || ""}`);
+    r._nc = fold(`${r.name} ${r.city || ""}`).replace(/[^a-z0-9 ]+/g, " ");
     if (r.city && r.lat && !r.approx) { const k = fold(r.city); if (!TOWNS.has(k)) TOWNS.set(k, { name: r.city, lat: r.lat, lon: r.lon }); }
   }
   // capitales de provincia como sitios "cerca de"
   for (const [n, la, lo] of CAPITALS) if (!TOWNS.has(fold(n))) TOWNS.set(fold(n), { name: n, lat: la, lon: lo });
+  for (const t of TOWNS.values()) addPlace(t.name, t.lat, t.lon, "");
   $("#towns").innerHTML = [...TOWNS.values()].sort((a, b) => a.name.localeCompare(b.name, "es")).map(t => `<option value="${esc(t.name)}">`).join("");
   const cc = [...new Set(RACES.map(r => r.ccaa).filter(Boolean))].sort((a, b) => a.localeCompare(b, "es"));
   $("#ccaa").insertAdjacentHTML("beforeend", cc.map(c => `<option>${esc(c)}</option>`).join(""));
@@ -90,6 +129,7 @@ async function load() {
   initMap();
   apply();
   handleIncomingPlan();
+  loadPlaces();
 }
 
 const CAPITALS = [["Madrid", 40.4168, -3.7038], ["Barcelona", 41.3874, 2.1686], ["Valencia", 39.4699, -0.3763], ["Sevilla", 37.3891, -5.9845], ["Zaragoza", 41.6488, -0.8891], ["Málaga", 36.7213, -4.4214], ["Murcia", 37.9922, -1.1307], ["Palma", 39.5696, 2.6502], ["Bilbao", 43.263, -2.935], ["Alicante", 38.3452, -0.481], ["Córdoba", 37.8882, -4.7794], ["Valladolid", 41.6523, -4.7245], ["Vigo", 42.2406, -8.7207], ["Gijón", 43.5322, -5.6611], ["A Coruña", 43.3623, -8.4115], ["Granada", 37.1773, -3.5986], ["Vitoria-Gasteiz", 42.8467, -2.6716], ["Oviedo", 43.3614, -5.8593], ["Pamplona", 42.8125, -1.6458], ["Santander", 43.4623, -3.81], ["San Sebastián", 43.3183, -1.9812], ["Logroño", 42.4627, -2.445], ["Salamanca", 40.9701, -5.6635], ["Burgos", 42.3439, -3.6969], ["León", 42.5987, -5.5671], ["Cáceres", 39.4753, -6.3724], ["Badajoz", 38.8794, -6.9707], ["Toledo", 39.8628, -4.0273], ["Albacete", 38.9943, -1.8585], ["Almería", 36.834, -2.4637], ["Huelva", 37.2614, -6.9447], ["Cádiz", 36.527, -6.2886], ["Jaén", 37.7796, -3.7849], ["Girona", 41.9794, 2.8214], ["Lleida", 41.6176, 0.62], ["Tarragona", 41.1189, 1.2445], ["Castellón de la Plana", 39.9864, -0.0513], ["Huesca", 42.1401, -0.4089], ["Teruel", 40.3456, -1.1065], ["Soria", 41.7636, -2.4649], ["Segovia", 40.9429, -4.1088], ["Ávila", 40.6565, -4.6818], ["Zamora", 41.5033, -5.7446], ["Palencia", 42.0095, -4.5288], ["Cuenca", 40.0704, -2.1374], ["Guadalajara", 40.6333, -3.1667], ["Ciudad Real", 38.9848, -3.9274], ["Lugo", 43.0097, -7.556], ["Ourense", 42.3358, -7.8639], ["Pontevedra", 42.431, -8.6444], ["Santa Cruz de Tenerife", 28.4636, -16.2518], ["Las Palmas de Gran Canaria", 28.1235, -15.4363]];
@@ -125,8 +165,11 @@ function catOf(r) {
 }
 function apply() {
   const [a, b] = dateWindow();
-  const q = fold(F.q).trim().split(/\s+/).filter(Boolean);
+  let q = fold(F.q).trim().split(/\s+/).filter(Boolean);
   const bounds = F.mapOnly && map ? map.getBounds() : null;
+  const place = F.q ? findPlace(F.q) : null;
+  SEARCH = place ? { place, R: F.searchKm || 30 } : null;
+  if (SEARCH) q = [];
   filtered = RACES.filter(r => {
     if (r.date < a || r.date > b) return false;
     if (F.surf.size && !F.surf.has(r.surface || "road")) return false;
@@ -139,16 +182,29 @@ function apply() {
     if (F.prov && r.province !== F.prov) return false;
     if (F.fav && !favs.has(r.id)) return false;
     if (q.length && !q.every(w => r._s.includes(w))) return false;
-    if (F.near) {
+    if (SEARCH) {
+      const pl = SEARCH.place;
+      r._d = r.lat ? haversine(pl.lat, pl.lon, r.lat, r.lon) : null;
+      const ck = fold(r.city || "").replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
+      const otherMuni = ck && ck !== pl.key && MUNI.has(ck); // es de otro municipio (aunque esté al lado)
+      const inTown = ck === pl.key || new RegExp(`\\b${pl.key}\\b`).test(r._nc) ||
+        (!otherMuni && r._d != null && r._d <= 6 && !r.approx); // barrios o sin pueblo: por cercanía
+      if (inTown) r._grp = "in";
+      else if (r._d != null && r._d <= SEARCH.R && !r.approx) r._grp = "near";
+      else return false;
+    } else if (F.near) {
+      r._grp = null;
       if (!r.lat) return false;
       r._d = haversine(F.near.lat, F.near.lon, r.lat, r.lon);
       if (r._d > F.nearKm) return false;
-    } else r._d = null;
+    } else { r._d = null; r._grp = null; }
     if (bounds && (!r.lat || !bounds.contains([r.lat, r.lon]))) return false;
     return true;
   });
+  if (SEARCH) filtered.sort((a, b) => (a._grp === b._grp ? 0 : a._grp === "in" ? -1 : 1) ||
+    (a._grp === "near" ? a._d - b._d : 0) || a.date.localeCompare(b.date)); // primero el municipio, luego lo cercano por distancia
   shown = 0;
-  $("#list").innerHTML = "";
+  $("#list").innerHTML = SEARCH ? searchBanner() : "";
   renderMore();
   const n = filtered.length;
   $("#count").innerHTML = `<span class="num">${n.toLocaleString("es-ES")}</span><span class="lbl">${n === 1 ? "carrera" : "carreras"}${F.fav ? " favoritas" : ""}</span>`;
@@ -195,7 +251,8 @@ function bindFilters() {
   });
   $("#nearTown").addEventListener("change", e => {
     const v = fold(e.target.value.trim());
-    F.near = v ? (TOWNS.get(v) || [...TOWNS.values()].find(x => fold(x.name).startsWith(v)) || null) : null;
+    const pl = v ? findPlace(v) : null;
+    F.near = pl ? { name: pl.name, lat: pl.lat, lon: pl.lon } : v ? (TOWNS.get(v) || [...TOWNS.values()].find(x => fold(x.name).startsWith(v)) || null) : null;
     if (v && !F.near) toast("No encuentro ese lugar; prueba con una capital de provincia");
     if (F.near) { e.target.value = F.near.name; map && map.setView([F.near.lat, F.near.lon], F.nearKm > 100 ? 7 : 9); }
     apply();
@@ -231,32 +288,49 @@ function cardHTML(r) {
     return `<span class="km${hl ? " hl" : ""}">${fmtDist(x)}</span>`;
   }).join("") + ((r.dist || []).length > 6 ? `<span class="km">+${r.dist.length - 6}</span>` : "");
   const where = [r.city, r.province && r.province !== r.city ? r.province : ""].filter(Boolean).join(", ");
-  return `<article class="card${r.id === selId ? " sel" : ""}" data-id="${r.id}" tabindex="0">
+  const grp = r._grp ? " " + r._grp : "";
+  return `<article class="card${grp}${r.id === selId ? " sel" : ""}" data-id="${r.id}" tabindex="0">
     <div class="bib ${surf}"><span class="d">${d.getDate()}</span><span class="m">${DAYS[d.getDay()]}<br>${MONTHS[d.getMonth()]}</span></div>
     <div>
       <h3>${esc(r.name)}</h3>
-      <div class="where"><span class="pill ${surf}">${surf === "trail" ? "Trail" : "Asfalto"}</span><span>${esc(where || "Ubicación por confirmar")}</span>${r._d != null ? `<span>· a ${fmtKm(r._d)}</span>` : ""}</div>
+      <div class="where"><span class="pill ${surf}">${surf === "trail" ? "Trail" : "Asfalto"}</span><span>${esc(where || "Ubicación por confirmar")}</span>${r._d != null && r._grp !== "in" ? `<span class="away">a ${fmtKm(r._d)}</span>` : ""}</div>
       ${dists ? `<div class="dists">${dists}</div>` : ""}
     </div>
     <button class="fav${favs.has(r.id) ? " on" : ""}" data-fav="${r.id}" type="button" aria-label="Favorita" aria-pressed="${favs.has(r.id)}">${favs.has(r.id) ? "♥" : "♡"}</button>
   </article>`;
 }
+function searchBanner() {
+  const { place, R } = SEARCH;
+  const nIn = filtered.filter(r => r._grp === "in").length;
+  return `<div class="search-banner">
+    <div><b>${esc(place.name)}</b>${place.prov ? ` <span class="muted">· ${esc(place.prov)}</span>` : ""}</div>
+    ${place.alts.length ? `<div class="alts">¿Otro ${esc(place.name)}? ${place.alts.slice(0, 4).map(a => `<button class="chip small" type="button" data-alt-prov="${esc(a.prov)}">${esc(a.prov || "otro")}</button>`).join("")}</div>` : ""}
+    <div class="radius">Cercanas hasta ${[10, 20, 30, 50, 100].map(k => `<button class="chip small${k === R ? " on" : ""}" type="button" data-radius="${k}">${k} km</button>`).join("")}</div>
+    ${nIn ? "" : `<p class="small muted" style="margin:6px 0 0">No hay carreras en ${esc(place.name)} con estos filtros; te enseño las cercanas.</p>`}
+  </div>`;
+}
+function groupOf(r) { return SEARCH ? r._grp : weekKey(r.date); }
+function groupHeader(g) {
+  const n = filtered.filter(x => groupOf(x) === g).length;
+  if (!SEARCH) return `<h2 class="wk-h">${weekLabel(g)}<span class="n">${n}</span></h2>`;
+  const pl = SEARCH.place.name;
+  return g === "in"
+    ? `<h2 class="sec-h in"><span class="sec-dot"></span>En ${esc(pl)}<span class="n">${n}</span></h2>`
+    : `<h2 class="sec-h near"><span class="sec-dot"></span>Cerca de ${esc(pl)} · por distancia<span class="n">${n}</span></h2>`;
+}
 function renderMore() {
   const list = $("#list");
-  if (!filtered.length) { list.innerHTML = `<p class="empty">Ninguna carrera con esos filtros. Prueba a ampliar fechas o radio.</p>`; $("#more").hidden = true; return; }
+  if (!filtered.length) { list.insertAdjacentHTML("beforeend", `<p class="empty">Ninguna carrera con esos filtros. Prueba a ampliar fechas o radio.</p>`); $("#more").hidden = true; return; }
   const slice = filtered.slice(shown, shown + PAGE);
-  let html = "", lastWk = list.lastElementChild?.dataset.wk;
-  let group = null;
+  const lastEl = [...list.children].reverse().find(x => x.classList.contains("wk"));
+  let html = "", lastG = lastEl?.dataset.wk, group = null;
   for (const r of slice) {
-    const wk = weekKey(r.date);
-    if (wk !== lastWk) {
+    const g = groupOf(r);
+    if (g !== lastG) {
       if (group) html += "</div>";
-      const n = filtered.filter(x => weekKey(x.date) === wk).length;
-      html += `<div class="wk" data-wk="${wk}"><h2 class="wk-h">${weekLabel(wk)}<span class="n">${n}</span></h2>`;
-      group = wk; lastWk = wk;
-    } else if (!group) { // continúa el grupo anterior
-      const last = list.lastElementChild; last.insertAdjacentHTML("beforeend", cardHTML(r)); continue;
-    }
+      html += `<div class="wk${SEARCH ? " sec " + g : ""}" data-wk="${g}">${groupHeader(g)}`;
+      group = g; lastG = g;
+    } else if (!group) { lastEl.insertAdjacentHTML("beforeend", cardHTML(r)); continue; }
     html += cardHTML(r);
   }
   if (group) html += "</div>";
@@ -266,6 +340,10 @@ function renderMore() {
 }
 function bindList() {
   $("#list").addEventListener("click", e => {
+    const rad = e.target.closest("[data-radius]");
+    if (rad) { F.searchKm = +rad.dataset.radius; apply(); return; }
+    const alt = e.target.closest("[data-alt-prov]");
+    if (alt) { SEARCH_PROV = alt.dataset.altProv; apply(); return; }
     const f = e.target.closest("[data-fav]");
     if (f) { e.stopPropagation(); toggleFav(f.dataset.fav); return; }
     const c = e.target.closest(".card"); if (c) openRace(c.dataset.id, true);
@@ -305,10 +383,13 @@ const getCss = v => getComputedStyle(document.documentElement).getPropertyValue(
 function initMap() {
   if (!window.L) { $("#map").innerHTML = `<p class="empty">No se pudo cargar el mapa.</p>`; return; }
   canvasR = L.canvas({ padding: 0.3 });
+  const HOVER = matchMedia("(hover: hover)").matches;
   map = L.map("map", { preferCanvas: true, zoomControl: true, worldCopyJump: false }).setView([40.2, -3.6], 6);
   baseLayers(map);
   markerLayer = L.layerGroup().addTo(map);
   map.on("moveend", () => { if (F.mapOnly) apply(); });
+  map.on("click", e => pickAt(e.containerPoint)); // toque: carreras bajo el dedo
+  if (HOVER) map.on("mousemove", e => { map.getContainer().style.cursor = hitsAt(e.containerPoint, 10).length ? "pointer" : ""; });
   map.on("dragstart zoomstart", e => { if (e.originalEvent || map._userAction) mapTouched = true; });
   map.getContainer().addEventListener("pointerdown", () => { mapTouched = true; });
 }
@@ -331,18 +412,48 @@ function drawMarkers() {
       color: r.approx ? approx : "#fff", fillColor: r.approx ? approx : col, fillOpacity: r.approx ? 0.55 : 0.9,
       dashArray: r.approx ? "2 2" : null,
     });
-    m.bindTooltip(`<b>${esc(r.name)}</b><br>${fmtShort(r.date)} · ${esc(r.city || r.province || "")}`, { direction: "top" });
-    m.on("click", () => showMapCard(r));
     m.addTo(markerLayer);
   }
+  if (SEARCH) { // municipio buscado y radio de "cercanas"
+    const pl = SEARCH.place, acc = getCss("--accent");
+    L.circle([pl.lat, pl.lon], { radius: SEARCH.R * 1000, color: acc, weight: 1.5, dashArray: "6 6", fillOpacity: 0.04, interactive: false }).addTo(markerLayer);
+    L.marker([pl.lat, pl.lon], { interactive: false, icon: L.divIcon({ className: "", html: `<div class="pin run">${ICON_RUN}</div>`, iconSize: [30, 30], iconAnchor: [15, 30] }) }).addTo(markerLayer);
+  }
+}
+function hitsAt(pt, px) {
+  const out = [];
+  for (const r of filtered) {
+    if (!r.lat) continue;
+    const q = map.latLngToContainerPoint([r.lat, r.lon]);
+    const d = Math.hypot(q.x - pt.x, q.y - pt.y);
+    if (d <= px) out.push([d, r]);
+  }
+  return out.sort((a, b) => a[0] - b[0] || a[1].date.localeCompare(b[1].date)).map(x => x[1]);
+}
+function pickAt(pt) {
+  let hits = hitsAt(pt, 22);
+  if (!hits.length) { if ($("#mapCard")) $("#mapCard").hidden = true; selId = null; drawMarkers(); return; }
+  // todas las carreras en ese mismo punto (mismo pueblo) aunque el dedo caiga en una
+  const f = hits[0];
+  hits = [...new Set([...hits, ...filtered.filter(r => r.lat === f.lat && r.lon === f.lon)])].sort((a, b) => a.date.localeCompare(b.date));
+  showMapCard(hits);
 }
 
-function showMapCard(r) {
-  selId = r.id; drawMarkers();
+function showMapCard(list) {
+  selId = list[0].id; drawMarkers();
   let box = $("#mapCard");
-  if (!box) { box = document.createElement("div"); box.id = "mapCard"; box.className = "map-card"; $("#viewMap").appendChild(box); }
-  box.innerHTML = cardHTML(r); box.hidden = false;
-  box.querySelector(".card").onclick = e => { if (e.target.closest("[data-fav]")) { toggleFav(r.id); return; } openRace(r.id); };
+  if (!box) {
+    box = document.createElement("div"); box.id = "mapCard"; box.className = "map-card"; $("#viewMap").appendChild(box);
+    box.addEventListener("click", e => {
+      if (e.target.closest("[data-close]")) { box.hidden = true; selId = null; drawMarkers(); return; }
+      const fv = e.target.closest("[data-fav]"); if (fv) { e.stopPropagation(); toggleFav(fv.dataset.fav); return; }
+      const c = e.target.closest(".card"); if (c) openRace(c.dataset.id);
+    });
+  }
+  const place = list[0].city || list[0].province || "";
+  box.innerHTML = `<div class="map-card-h"><b>${list.length === 1 ? "1 carrera" : `${list.length} carreras`}${place ? ` · ${esc(place)}` : ""}</b><button class="x small-x" type="button" data-close aria-label="Cerrar">✕</button></div>
+    <div class="map-card-list">${list.map(cardHTML).join("")}</div>`;
+  box.hidden = false;
 }
 
 // ------------------------------------------------------------------ pantallas y botón "atrás"
@@ -937,6 +1048,8 @@ function setTab(view) {
   if (view === "map" && map) setTimeout(() => { map.invalidateSize(); if (!mapTouched) fitToResults(); }, 30);
   if (view !== "map" && $("#mapCard")) $("#mapCard").hidden = true;
 }
+
+window.__cdc = { get map() { return map; }, get filtered() { return filtered; } }; // para pruebas automáticas
 
 // ------------------------------------------------------------------ init
 function init() {
