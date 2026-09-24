@@ -53,10 +53,22 @@ const PAGE = 120;
 function saveFilters() { store.set("filters", { ...F, surf: [...F.surf], cats: [...F.cats], near: null }); }
 
 // ------------------------------------------------------------------ carga
+// En la app Android los datos vienen incluidos; si hay internet se intenta la versión semanal publicada.
+async function fetchRaces() {
+  const remote = window.CDC_DATA_URL;
+  if (remote) {
+    try {
+      const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 6000);
+      const r = await fetch(remote, { cache: "no-cache", signal: ctl.signal }).finally(() => clearTimeout(to));
+      if (r.ok) { const d = await r.json(); if (d.races?.length) return d; }
+    } catch { /* sin conexión: datos incluidos */ }
+  }
+  const r = await fetch("data/races.json", { cache: "no-cache" });
+  return r.json();
+}
 async function load() {
   try {
-    const r = await fetch("data/races.json", { cache: "no-cache" });
-    const d = await r.json();
+    const d = await fetchRaces();
     META = d.meta || {}; RACES = (d.races || []).filter(x => x.date >= today);
   } catch (e) {
     $("#count").textContent = "No se pudieron cargar las carreras.";
@@ -652,6 +664,7 @@ function bindPlan() {
   };
   $("#shSend").onclick = async () => {
     const url = await planURL(p);
+    if (APP && CAP.Share) { try { await CAP.Share.share({ title: p.title, text: `${planText(p)}\n\n${url}`, dialogTitle: "Enviar plan" }); return; } catch { return; } }
     if (navigator.share && !EMBED) { try { await navigator.share({ title: p.title, text: planText(p), url: url.startsWith("http") ? url : undefined }); return; } catch { /* cancelado */ } }
     copy(`${planText(p)}\n\n${url}`, "Plan copiado: pégalo en WhatsApp o Telegram");
   };
@@ -808,18 +821,19 @@ async function decodePlan(code) {
 }
 // En la vista previa embebida (artifact) no hay URL propia que reciba ?plan=; se usa la pública si existe.
 const EMBED = !!window.CDC_EMBED, PUBLIC_URL = window.CDC_PUBLIC_URL || "";
+const APP = !!window.CDC_APP, CAP = window.Capacitor?.Plugins || {};
 function baseURL() {
-  if (EMBED) return PUBLIC_URL;
+  if (EMBED || APP) return PUBLIC_URL;
   const u = new URL(location.href); u.search = ""; u.hash = ""; return u.toString();
 }
 async function planURL(p) {
   const code = await encodePlan(p);
-  if (EMBED && !PUBLIC_URL) return `Plan «${p.title}» de Correr·Dormir·Comer.\nÁbrelo en Mis planes → Importar y pega este código:\n${code}`;
+  if ((EMBED || APP) && !PUBLIC_URL) return `Plan «${p.title}» de Correr·Dormir·Comer.\nÁbrelo en Mis planes → Importar y pega este código:\n${code}`;
   return `${baseURL()}?plan=${code}`;
 }
 async function refreshShare() {
   if (!P) return;
-  const code = await encodePlan(P), url = EMBED && !PUBLIC_URL ? code : `${baseURL()}?plan=${code}`;
+  const code = await encodePlan(P), url = (EMBED || APP) && !PUBLIC_URL ? code : `${baseURL()}?plan=${code}`;
   const c = $("#planCode"); if (c) c.textContent = code;
   const q = $("#qr");
   if (q && window.qrcode) {
@@ -854,8 +868,15 @@ function planICS(p) {
   out.push("END:VCALENDAR");
   return out.join("\r\n");
 }
-function downloadOrCopy(text, name, type) {
+async function downloadOrCopy(text, name, type) {
   if (EMBED) return copy(text, `${name} copiado al portapapeles`);
+  if (APP && CAP.Filesystem && CAP.Share) { // Android: guarda el archivo y abre el menú compartir (Calendario, Drive, WhatsApp…)
+    try {
+      const f = await CAP.Filesystem.writeFile({ path: name, data: text, directory: "CACHE", encoding: "utf8" });
+      await CAP.Share.share({ title: name, files: [f.uri], dialogTitle: "Abrir o enviar" });
+      return;
+    } catch (e) { if (!/cancel/i.test(e?.message || "")) console.warn(e); return; }
+  }
   try {
     const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name;
     document.body.appendChild(a); a.click(); a.remove();
@@ -925,7 +946,13 @@ function init() {
   F.fav = false;
   $$(".tabbar button").forEach(b => b.onclick = () => setTab(b.dataset.view));
   document.addEventListener("keydown", e => { if (e.key === "Escape") { if (!$("#filterSheet").hidden) openFilterSheet(false); else if (STACK.length) history.back(); } });
-  if ("serviceWorker" in navigator && location.protocol === "https:" && !/claude|artifact/.test(location.host)) navigator.serviceWorker.register("sw.js").catch(() => {});
+  if (window.CDC_APP) document.addEventListener("click", e => { // Android: enlaces externos en el navegador del sistema
+    const a = e.target.closest("a[href^='http']"); if (!a) return;
+    const P = window.Capacitor?.Plugins || {};
+    e.preventDefault();
+    if (P.Browser) P.Browser.open({ url: a.href }); else window.open(a.href, "_system");
+  });
+  if ("serviceWorker" in navigator && !window.CDC_APP && location.protocol === "https:" && !/claude|artifact/.test(location.host)) navigator.serviceWorker.register("sw.js").catch(() => {});
   load();
 }
 init();

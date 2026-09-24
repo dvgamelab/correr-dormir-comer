@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Correr Dormir Comer</string>
+    <string name="title_activity_main">Correr Dormir Comer</string>
+    <string name="package_name">es.correrdormircomer.app</string>
+    <string name="custom_url_scheme">es.correrdormircomer.app</string>
+</resources>

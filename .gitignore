@@ -3,3 +3,5 @@ __pycache__/
 dist-artifact/
 .DS_Store
 *.zip
+*.apk
+firma-apk-PRIVADO.zip

@@ -67,10 +67,26 @@ Para refrescar solo una fuente: `python scraper/run.py --only runedia`.
 
 ### Publicado y actualizado cada semana (GitHub Pages)
 1. Crea un repositorio en GitHub y sube esta carpeta.
-2. En **Settings → Pages**, elige **Source: GitHub Actions**.
+2. En **Settings → Pages**, elige **Source: GitHub Actions** (hay que hacerlo antes del primer despliegue).
 3. En **Actions**, lanza "Recolectar carreras (semanal) y publicar" con *Run workflow*.
 
 A partir de ahí se ejecuta **cada lunes a las 04:00 UTC**: recolecta, guarda los datos en el repo y publica la web en `https://<usuario>.github.io/<repo>/`. Los enlaces de planes compartidos apuntan a esa URL.
+
+## App Android (APK)
+
+`mobile/` es un proyecto [Capacitor](https://capacitorjs.com) que mete la web dentro de una app nativa:
+
+- Bloqueada en vertical, con icono y pantalla de inicio propios.
+- Lleva dentro las carreras del último volcado, Leaflet y el generador de QR, así que funciona sin conexión.
+- Con internet, al abrirse descarga `races.json` de la web publicada en GitHub Pages. Los datos semanales llegan sin reinstalar.
+- Compartir plan y exportar `.ics` usan el menú nativo de Android. Los enlaces externos se abren en el navegador. "Usar mi ubicación" pide permiso de GPS.
+
+Recompilar (necesita JDK 21 y el SDK de Android 35):
+```bash
+cd mobile && npm install
+npm run apk        # → android/app/build/outputs/apk/release/app-release.apk
+```
+La firma usa `mobile/cdc-release.keystore` + `mobile/keystore.properties` (no están en el repo). Guárdalos: sin ellos, una APK nueva no se instala encima de la anterior y habría que desinstalar.
 
 ## Estructura
 ```
@@ -82,6 +98,7 @@ scraper/
 web/                app estática sin build (HTML + CSS + JS + Leaflet)
   data/races.json   datos generados
   data/spain.geo.json  provincias (IGN vía es-atlas) para el mapa sin conexión
+mobile/             app Android (Capacitor): prepare-web.mjs copia web/ en modo app
 tools/build_artifact.py  versión para vista previa en Claude
 .github/workflows/weekly.yml  cron semanal + despliegue en Pages
 ```

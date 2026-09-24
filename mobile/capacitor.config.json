@@ -1,0 +1,7 @@
+{
+  "appId": "es.correrdormircomer.app",
+  "appName": "Correr Dormir Comer",
+  "webDir": "www",
+  "android": { "backgroundColor": "#EEF1EF" },
+  "server": { "androidScheme": "https" }
+}
