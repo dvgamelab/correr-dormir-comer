@@ -72,7 +72,7 @@ h1,h2,h3{font-family:var(--display);letter-spacing:.01em;text-wrap:balance;margi
 .dot.road{background:var(--road)} .dot.trail{background:var(--trail)} .dot.approx{background:transparent;border:2px dashed var(--approx);width:11px;height:11px}
 
 /* ============ vistas ============ */
-.views{position:relative;min-height:0}
+.views{position:relative;min-height:0;z-index:0;isolation:isolate} /* el mapa (capas 400-700 de Leaflet) queda por debajo de fichas y planes */
 .view{position:absolute;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
 #viewList{padding:4px 16px 24px}
 #viewMap{overflow:hidden}
@@ -140,7 +140,7 @@ input[type=date],input[type=time]{min-width:0;max-width:100%}
 @keyframes up{from{transform:translateY(40px);opacity:.4}to{transform:none;opacity:1}}
 
 /* ============ pantallas completas (ficha, plan, mis planes) ============ */
-.screen{position:absolute;inset:0;z-index:30;background:var(--bg);overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;animation:slide .2s ease-out}
+.screen{position:absolute;inset:0;z-index:30;isolation:isolate;background:var(--bg);overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;animation:slide .2s ease-out}
 @keyframes slide{from{transform:translateX(24px);opacity:.5}to{transform:none;opacity:1}}
 .bar{position:sticky;top:0;z-index:10;display:flex;align-items:center;gap:10px;padding:calc(8px + var(--safe-t)) 12px 8px;background:var(--surface);border-bottom:1px solid var(--line)}
 .bar h2{flex:1;font-size:22px;font-weight:800;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

@@ -539,7 +539,7 @@ function openRace(id) {
         <a class="btn ghost small" href="${gmaps}" target="_blank" rel="noopener">Cómo llegar ↗</a>
         <a class="btn ghost small" href="https://www.google.com/search?q=${encodeURIComponent(r.name + " " + pd(r.date).getFullYear())}" target="_blank" rel="noopener">Buscar en Google ↗</a>
       </div>
-      <p class="src-list">Aparece en: ${(r.src || []).map(s => `<a href="${esc(s.u)}" target="_blank" rel="noopener">${esc(s.n)}</a>`).join(" · ")}</p>
+      <p class="src-list">Aparece en: ${(r.src || []).filter((s, i, a) => a.findIndex(x => x.n === s.n) === i).map(s => `<a href="${esc(s.u)}" target="_blank" rel="noopener">${esc(s.n)}</a>`).join(" · ")}</p>
     </div>`;
   sheet.hidden = false; sheet.scrollTop = 0;
   if (!STACK.some(x => x.name === "race")) pushScreen("race", hideRace);
