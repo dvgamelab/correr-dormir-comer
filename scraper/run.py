@@ -17,9 +17,9 @@ import traceback
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from common import dump, load, is_running, session, guess_surface, log  # noqa: E402
+from common import dump, load, is_running, session, guess_surface, parse_distances, log  # noqa: E402
 import geo  # noqa: E402
-from sources import running_life, runedia, carreraspopulares, runnea, corriendovoy  # noqa: E402
+from sources import running_life, runedia, carreraspopulares, runnea, corriendovoy, fororunners  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA = os.path.join(ROOT, "data")
@@ -33,12 +33,13 @@ SOURCES = {
     "carreraspopulares": carreraspopulares,
     "runnea": runnea,
     "corriendovoy": corriendovoy,
+    "fororunners": fororunners,
 }
 # prioridad para elegir nombre/datos cuando una carrera aparece en varias fuentes
-NAME_PRIORITY = ["runnea", "carreraspopulares", "running.life", "corriendovoy", "runedia"]
+NAME_PRIORITY = ["runnea", "carreraspopulares", "fororunners", "running.life", "corriendovoy", "runedia"]
 SOURCE_LABEL = {
     "running.life": "running.life", "runedia": "Runedia", "carreraspopulares": "CarrerasPopulares",
-    "runnea": "Runnea", "corriendovoy": "Corriendo Voy",
+    "runnea": "Runnea", "corriendovoy": "Corriendo Voy", "fororunners": "Foro Runners",
 }
 
 
@@ -139,11 +140,23 @@ ROMAN = re.compile(r"^(?=[mdclxvi]+$)m{0,3}(cm|cd|d?c{0,3})(xc|xl|l?x{0,3})(ix|i
 
 
 WEAK = set("""solidaria solidari benefica nocturna urbana media maraton marato mitja milla legua cross night race
-running corre correr carreira popular infantil familiar mujer dona women trail sant santa san virgen fiestas""".split())
+running corre correr carreira popular infantil familiar mujer dona women trail sant santa san virgen fiestas
+fiesta cursa carrera marxa marcha caminada solidari solidaria solidario benefica internacional nacional
+circuito circuit series serie premio trofeo memorial ciudad villa race carrera km absoluta juvenil
+nocturno nocturna vertical ultra sky skyrace montana muntanya mendi lasterketa""".split())
+
+
+# variantes bilingües / ortográficas frecuentes en nombres de carreras
+ALIAS = {"castello": "castellon", "alacant": "alicante", "lerida": "lleida", "gerona": "girona", "eivissa": "ibiza",
+         "xixona": "jijona", "alcoi": "alcoy", "elx": "elche", "jonquera": "junquera", "zumaia": "zumaya", "platja": "playa",
+         "donostia": "sebastian", "gasteiz": "vitoria", "iruna": "pamplona", "bizkaia": "vizcaya", "gipuzkoa": "guipuzcoa",
+         "araba": "alava", "ourense": "orense", "coruna": "coruna", "sant": "san", "nadal": "navidad", "mitja": "media",
+         "marato": "maraton", "marathon": "maraton", "half": "media", "cursa": "carrera", "muntanya": "montana", "carreira": "carrera", "mendi": "montana"}
 
 
 def tokens(name):
     t = geo.fold(name)
+    t = " ".join(ALIAS.get(w, w) for w in t.split())
     t = re.sub(r"([a-z])(\d)|(\d)([a-z])", r"\1\3 \2\4", t)
     t = re.sub(r"\b\d+\s*(a|o|th|st|nd|rd|ª|º|era|er|na|ena)\b", " ", t)
     out = set()
@@ -172,6 +185,101 @@ def dist_km(a, b):
     dlon = math.radians(b["lon"] - a["lon"])
     x = math.sin(dlat / 2) ** 2 + math.cos(math.radians(a["lat"])) * math.cos(math.radians(b["lat"])) * math.sin(dlon / 2) ** 2
     return 6371 * 2 * math.asin(math.sqrt(x))
+
+
+def name_key(name):
+    """Nombre plegado sin años, ordinales ni numeración romana, para comparar cadenas."""
+    t = geo.fold(name)
+    t = " ".join(ALIAS.get(w, w) for w in t.split())
+    t = re.sub(r"\b(19|20)\d\d\b", " ", t)
+    t = re.sub(r"\b\d+\s*(a|o|th|st|nd|rd|era|er|na|ena|ª|º)?\b(?!\s*k)", " ", t)
+    t = " ".join(w for w in t.split() if not ROMAN.match(w) and w not in ("edicion", "ed", "edicio"))
+    return t
+
+
+def pair_score(r, o):
+    """0..1+: cuánto se parecen dos fichas para considerarlas la misma carrera."""
+    from difflib import SequenceMatcher
+    d = dist_km(r, o)
+    exact = not (r.get("approx") or o.get("approx"))
+    same_town = bool(geo.fold(r.get("city", ""))) and geo.fold(r.get("city", "")) == geo.fold(o.get("city", ""))
+    near = (d is not None and d < 12 and exact) or same_town
+    far = d is not None and d > 60 and exact
+    # palabras distintivas: sin genéricas ("carrera popular", "solidaria"…) ni el nombre del pueblo
+    if d is not None and d > 25 and exact:
+        return 0  # dos puntos GPS fiables a más de 25 km: no es la misma carrera
+    town = set(geo.fold(r.get("city", "")).split()) | set(geo.fold(o.get("city", "")).split())
+    a, b = r["_tok"] - WEAK - town - GENERIC, o["_tok"] - WEAK - town - GENERIC
+    ka, kb = " ".join(sorted(a)), " ".join(sorted(b))
+    dratio = SequenceMatcher(None, ka, kb).ratio() if ka and kb else 0
+    shared = {w for w in a & b if len(w) >= 3}
+    same_prov = r.get("province") and r.get("province") == o.get("province")
+    loose = r.get("approx") or o.get("approx") or not r.get("city") or not o.get("city") or (d is not None and d < 30)
+    da, db = r.get("distances") or [], o.get("distances") or []
+    dist_ok = not (da and db) or any(abs(x - y) <= max(0.6, 0.12 * max(x, y)) for x in da for y in db)
+    if a and b and not shared and (dratio < 0.88 or min(len(ka), len(kb)) < 12):
+        return 0  # no comparten nada propio: son carreras distintas aunque sean el mismo día y sitio
+    if not (a and b):
+        # Nombres genéricos + lugar ("Trail de Jalance", "Maratón Estepona"): el pueblo es lo que identifica.
+        if r["date"] != o["date"]:
+            return 0
+        a2, b2 = r["_tok"] - WEAK, o["_tok"] - WEAK
+        small, big = (a2, b2) if len(a2) <= len(b2) else (b2, a2)
+        place_ok = near or (same_prov and loose)
+        if small and small <= big and place_ok and dist_ok:
+            return 0.65
+        strip = lambda k: " ".join(w for w in k.split() if w not in town)  # noqa: E731
+        full = SequenceMatcher(None, strip(r["_key"]), strip(o["_key"])).ratio()
+        if near and full >= 0.97:
+            return 0.7  # mismo nombre en el mismo sitio (fichas por distancia de una misma prueba)
+        return 0.7 if near and full >= 0.9 and dist_ok else 0
+    sim = similar(a, b)
+    score = max(sim, dratio - 0.1 if min(len(ka), len(kb)) >= 12 else 0) + (0.25 if near else 0) - (0.4 if far else 0)
+    if near and shared:
+        score = max(score, 0.6)
+    elif shared and (a <= b or b <= a) and same_prov and loose and dist_ok:
+        score = max(score, 0.6)  # p. ej. "Tramuntana Trail" (La Jonquera) ~ "Tramuntana Trail Transforter" (La Junquera)
+    if r["date"] != o["date"]:  # fechas distintas entre webs: sólo si el parecido es muy alto
+        score = score - 0.25 if (dratio >= 0.85 or sim >= 0.75) and not far else 0
+    return score
+
+
+GENERIC = set()
+
+
+def dedupe(rows):
+    """Agrupa las fichas que son la misma carrera (misma fecha o ±1 día, nombre parecido, mismo sitio)."""
+    # palabras que aparecen en muchas carreras distintas ("silvestre", "volta", "cancer"…) no identifican nada
+    from collections import Counter
+    df = Counter(w for key in {name_key(r["name"]) for r in rows} for w in set(tokens(key)))
+    GENERIC.clear()
+    GENERIC.update(w for w, n in df.items() if n >= 9)
+    log.info("palabras genéricas detectadas: %d (p. ej. %s)", len(GENERIC), ", ".join(sorted(GENERIC)[:12]))
+    for r in rows:
+        r["_key"] = name_key(r["name"])
+    rows = sorted(rows, key=lambda x: (x["date"], NAME_PRIORITY.index(x["source"])))
+    clusters, by_day = [], {}
+    for r in rows:
+        cands = []
+        for dd in (-1, 0, 1):
+            day = (dt.date.fromisoformat(r["date"]) + dt.timedelta(days=dd)).isoformat()
+            cands += by_day.get(day, [])
+        best, bs, via = None, 0.0, None
+        for c in cands:
+            for o in c:
+                sc = pair_score(r, o)
+                if sc > bs:
+                    best, bs, via = c, sc, o
+        if best is not None and bs >= 0.6:
+            r["_why"] = f'{bs:.2f} ~ {via["source"]}: {via["name"]}'
+            best.append(r)
+        else:
+            c = [r]
+            clusters.append(c)
+            by_day.setdefault(r["date"], []).append(c)
+    for c in clusters:  # la fuente de más prioridad manda (nombre, fecha)
+        c.sort(key=lambda x: NAME_PRIORITY.index(x["source"]))
+    return clusters
 
 
 def categories(distances, surface):
@@ -240,6 +348,11 @@ def build(geocode_budget, status):
             r["date"] = f"{m.group(1)}-{int(m.group(2)):02d}-{int(m.group(3)):02d}" if m else ""
             if not r.get("surface"):
                 r["surface"] = guess_surface(r["name"], r.get("kind", ""))
+            ds = list(r.get("distances") or [])
+            for x in parse_distances(r["name"]):  # "Palma Marathon", "10K Valencia"… aunque la ficha no lo diga
+                if all(abs(x - y) > 0.3 for y in ds):
+                    ds.append(x)
+            r["distances"] = sorted(ds)
             if not r.get("date") or r["date"] < today or not is_running(r["name"], r.get("kind", "")):
                 continue
             rows.append(r)
@@ -278,31 +391,12 @@ def build(geocode_budget, status):
     gc.save()
 
     # ------------------------------------------------------------- dedupe
-    by_date = {}
-    for r in rows:
-        by_date.setdefault(r["date"], []).append(r)
-    merged = []
-    for date, items in by_date.items():
-        clusters = []
-        for r in sorted(items, key=lambda x: NAME_PRIORITY.index(x["source"])):
-            best, bs = None, 0
-            for c in clusters:
-                for o in c:
-                    sim = similar(r["_tok"], o["_tok"])
-                    d = dist_km(r, o)
-                    same_town = geo.fold(r.get("city", "")) and geo.fold(r.get("city", "")) == geo.fold(o.get("city", ""))
-                    near = (d is not None and d < 12 and not (r.get("approx") or o.get("approx"))) or same_town
-                    score = sim + (0.25 if near else 0) - (0.3 if d is not None and d > 60 and not (r.get("approx") or o.get("approx")) else 0)
-                    if near and any(len(w) >= 5 and w not in WEAK for w in r["_tok"] & o["_tok"]):
-                        score = max(score, 0.6)  # mismo pueblo, mismo día y comparten una palabra distintiva
-                    if score > bs:
-                        best, bs = c, score
-            if best is not None and bs >= 0.6:
-                best.append(r)
-            else:
-                clusters.append([r])
-        for c in clusters:
-            merged.append(merge(c))
+    clusters = dedupe(rows)
+    merged = [merge(c) for c in clusters]
+    report = [{"name": m["name"], "date": m["date"], "merged": [f'{x["source"]}: {x["name"]} ({x["date"]}, {x.get("city", "")})' + (f' [{x["_why"]}]' if x.get("_why") else "") for x in c]}
+              for m, c in zip(merged, clusters) if len(c) > 1]
+    dump(os.path.join(DATA, "dedupe_report.json"), report)
+    log.info("fusiones: %d grupos con más de una ficha (ver data/dedupe_report.json)", len(report))
     merged.sort(key=lambda x: (x["date"], x["name"]))
     log.info("carreras únicas: %d", len(merged))
 

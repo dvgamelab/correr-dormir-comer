@@ -5,9 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Correr Dormir Comer</title>
 <meta name="description" content="Todas las carreras de España (asfalto y trail) y un planificador de fin de semana: correr, dormir y comer.">
-<meta name="theme-color" content="#F0532B">
+<meta name="theme-color" content="#E8491F">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="CorrerDormirComer">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=Figtree:wght@400;500;600;700&display=swap">
@@ -15,28 +20,29 @@
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
-<div class="app" id="app">
+<div class="phone" id="app">
   <header class="topbar">
-    <a class="brand" href="#" id="brandLink" aria-label="Inicio">
-      <span class="brand-mark" aria-hidden="true"><i class="d1"></i><i class="d2"></i><i class="d3"></i></span>
-      <span class="brand-word">correr<b>·</b>dormir<b>·</b>comer</span>
-    </a>
-    <label class="search" for="q">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
-      <input id="q" type="search" placeholder="Busca carrera, pueblo o provincia" autocomplete="off">
-    </label>
-    <button class="btn ghost plans-btn" id="openPlans" type="button">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h10"/></svg>
-      <span>Mis planes</span><span class="badge" id="plansCount">0</span>
-    </button>
-  </header>
-
-  <section class="filters" aria-label="Filtros">
-    <div class="chip-group" role="group" aria-label="Superficie">
+    <div class="brand-row">
+      <a class="brand" href="#" id="brandLink" aria-label="Inicio">
+        <span class="brand-mark" aria-hidden="true"><i class="d1"></i><i class="d2"></i><i class="d3"></i></span>
+        <span class="brand-word">correr<b>·</b>dormir<b>·</b>comer</span>
+      </a>
+      <p class="count" id="count">Cargando…</p>
+    </div>
+    <div class="search-row">
+      <label class="search" for="q">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+        <input id="q" type="search" placeholder="Carrera, pueblo o provincia" autocomplete="off" enterkeyhint="search">
+      </label>
+      <button class="icon-btn" id="openFilters" type="button" aria-label="Filtros">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
+        <span class="dotbadge" id="filtersBadge" hidden></span>
+      </button>
+    </div>
+    <div class="chips" role="group" aria-label="Filtros rápidos">
+      <button class="chip" data-when="thisw" type="button">Este finde</button>
       <button class="chip" data-surface="road" type="button"><i class="dot road"></i>Asfalto</button>
       <button class="chip" data-surface="trail" type="button"><i class="dot trail"></i>Trail</button>
-    </div>
-    <div class="chip-group" role="group" aria-label="Distancia">
       <button class="chip" data-cat="5k" type="button">5K</button>
       <button class="chip" data-cat="10k" type="button">10K</button>
       <button class="chip" data-cat="21k" type="button">Media</button>
@@ -44,8 +50,35 @@
       <button class="chip" data-cat="ultra" type="button">Ultra</button>
       <button class="chip" data-cat="other" type="button">Otras</button>
     </div>
-    <div class="selects">
-      <select id="when" aria-label="Cuándo">
+  </header>
+
+  <main class="views">
+    <section class="view" id="viewList" aria-label="Carreras">
+      <div id="list" class="list"></div>
+      <button class="btn ghost more" id="more" type="button" hidden>Mostrar más carreras</button>
+      <footer class="data-foot" id="dataFoot"></footer>
+    </section>
+    <section class="view" id="viewMap" aria-label="Mapa" hidden>
+      <div id="map"></div>
+      <div class="legend"><span><i class="dot road"></i>Asfalto</span><span><i class="dot trail"></i>Trail</span><span><i class="dot approx"></i>Aprox.</span></div>
+      <label class="map-toggle"><input type="checkbox" id="mapFilter"> Lista = zona visible</label>
+    </section>
+  </main>
+
+  <nav class="tabbar" aria-label="Secciones">
+    <button type="button" data-view="list" class="on"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>Carreras</button>
+    <button type="button" data-view="map"><svg viewBox="0 0 24 24"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/></svg>Mapa</button>
+    <button type="button" data-view="fav"><svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>Favoritas</button>
+    <button type="button" data-view="plans"><svg viewBox="0 0 24 24"><path d="M7 3v3M17 3v3M4 8h16M5 5h14v15H5z"/></svg>Planes<span class="badge" id="plansCount">0</span></button>
+  </nav>
+
+  <!-- hoja de filtros -->
+  <div class="scrim" id="scrim" hidden></div>
+  <section class="bottom-sheet" id="filterSheet" hidden aria-label="Filtros">
+    <div class="grab"></div>
+    <h2>Filtros</h2>
+    <label class="field">Cuándo
+      <select id="when">
         <option value="all">Cualquier fecha</option>
         <option value="thisw">Este finde</option>
         <option value="nextw">Próximo finde</option>
@@ -53,50 +86,32 @@
         <option value="90">Próximos 3 meses</option>
         <option value="custom">Elegir fechas…</option>
       </select>
-      <span class="daterange" id="dateRange" hidden>
-        <input type="date" id="dFrom" aria-label="Desde">
-        <input type="date" id="dTo" aria-label="Hasta">
-      </span>
-      <select id="ccaa" aria-label="Comunidad"><option value="">Toda España</option></select>
-      <span class="near">
-        <input id="nearTown" list="towns" placeholder="Cerca de…" aria-label="Cerca de (pueblo o ciudad)">
-        <select id="nearKm" aria-label="Radio">
-          <option value="25">25 km</option><option value="50" selected>50 km</option>
-          <option value="100">100 km</option><option value="200">200 km</option>
-        </select>
-      </span>
-      <datalist id="towns"></datalist>
-      <button class="link-btn" id="clearFilters" type="button">Limpiar</button>
+    </label>
+    <div class="grid2" id="dateRange" hidden>
+      <label class="field">Desde<input type="date" id="dFrom"></label>
+      <label class="field">Hasta<input type="date" id="dTo"></label>
+    </div>
+    <label class="field">Comunidad autónoma<select id="ccaa"><option value="">Toda España</option></select></label>
+    <label class="field">Provincia<select id="prov"><option value="">Todas</option></select></label>
+    <div class="grid2">
+      <label class="field">Cerca de<input id="nearTown" list="towns" placeholder="Pueblo o ciudad"></label>
+      <label class="field">Radio
+        <select id="nearKm"><option value="25">25 km</option><option value="50" selected>50 km</option><option value="100">100 km</option><option value="200">200 km</option></select>
+      </label>
+    </div>
+    <button class="btn ghost" id="useGps" type="button"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>Usar mi ubicación</button>
+    <datalist id="towns"></datalist>
+    <div class="sheet-actions">
+      <button class="btn ghost" id="clearFilters" type="button">Limpiar</button>
+      <button class="btn primary" id="applyFilters" type="button">Ver carreras</button>
     </div>
   </section>
 
-  <main class="split" id="split">
-    <section class="list-pane" id="listPane" aria-label="Carreras">
-      <div class="list-head">
-        <p class="count" id="count">Cargando carreras…</p>
-        <label class="toggle"><input type="checkbox" id="mapFilter"> Filtrar por zona del mapa</label>
-        <button class="chip small" id="favOnly" type="button" aria-pressed="false">♥ Favoritas</button>
-      </div>
-      <div id="list" class="list"></div>
-      <button class="btn ghost more" id="more" type="button" hidden>Mostrar más carreras</button>
-      <footer class="data-foot" id="dataFoot"></footer>
-    </section>
-    <section class="map-pane" aria-label="Mapa">
-      <div id="map"></div>
-      <div class="legend"><span><i class="dot road"></i>Asfalto</span><span><i class="dot trail"></i>Trail</span><span><i class="dot approx"></i>Ubicación aproximada</span></div>
-    </section>
-  </main>
-
-  <nav class="tabbar" aria-label="Vistas">
-    <button type="button" data-view="list" class="on">Lista</button>
-    <button type="button" data-view="map">Mapa</button>
-    <button type="button" data-view="plans">Planes</button>
-  </nav>
-
-  <aside class="sheet" id="sheet" hidden aria-live="polite"></aside>
-  <section class="plan-view" id="planView" hidden></section>
-  <section class="plans-view" id="plansView" hidden></section>
+  <aside class="screen" id="sheet" hidden aria-live="polite"></aside>
+  <section class="screen" id="planView" hidden></section>
+  <section class="screen" id="plansView" hidden></section>
   <div class="toast" id="toast" role="status" hidden></div>
+  <div class="rotate" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg><p>Gira el móvil: la app se usa en vertical</p></div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>

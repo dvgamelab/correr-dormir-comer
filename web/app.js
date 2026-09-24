@@ -43,7 +43,7 @@ async function copy(text, okMsg = "Copiado") {
 
 // ------------------------------------------------------------------ estado
 let RACES = [], META = {}, BYID = new Map(), TOWNS = new Map();
-const F = { q: "", surf: new Set(), cats: new Set(), when: "all", from: "", to: "", ccaa: "", near: null, nearKm: 50, fav: false, mapOnly: false, ...store.get("filters", {}) };
+const F = { q: "", surf: new Set(), cats: new Set(), when: "all", from: "", to: "", ccaa: "", prov: "", near: null, nearKm: 50, fav: false, mapOnly: false, ...store.get("filters", {}) };
 F.surf = new Set(F.surf || []); F.cats = new Set(F.cats || []);
 let favs = new Set(store.get("favs", []));
 let plans = store.get("plans", {});
@@ -72,6 +72,7 @@ async function load() {
   $("#towns").innerHTML = [...TOWNS.values()].sort((a, b) => a.name.localeCompare(b.name, "es")).map(t => `<option value="${esc(t.name)}">`).join("");
   const cc = [...new Set(RACES.map(r => r.ccaa).filter(Boolean))].sort((a, b) => a.localeCompare(b, "es"));
   $("#ccaa").insertAdjacentHTML("beforeend", cc.map(c => `<option>${esc(c)}</option>`).join(""));
+  fillProvinces();
   renderFoot();
   syncFilterUI();
   initMap();
@@ -80,6 +81,12 @@ async function load() {
 }
 
 const CAPITALS = [["Madrid", 40.4168, -3.7038], ["Barcelona", 41.3874, 2.1686], ["Valencia", 39.4699, -0.3763], ["Sevilla", 37.3891, -5.9845], ["Zaragoza", 41.6488, -0.8891], ["Málaga", 36.7213, -4.4214], ["Murcia", 37.9922, -1.1307], ["Palma", 39.5696, 2.6502], ["Bilbao", 43.263, -2.935], ["Alicante", 38.3452, -0.481], ["Córdoba", 37.8882, -4.7794], ["Valladolid", 41.6523, -4.7245], ["Vigo", 42.2406, -8.7207], ["Gijón", 43.5322, -5.6611], ["A Coruña", 43.3623, -8.4115], ["Granada", 37.1773, -3.5986], ["Vitoria-Gasteiz", 42.8467, -2.6716], ["Oviedo", 43.3614, -5.8593], ["Pamplona", 42.8125, -1.6458], ["Santander", 43.4623, -3.81], ["San Sebastián", 43.3183, -1.9812], ["Logroño", 42.4627, -2.445], ["Salamanca", 40.9701, -5.6635], ["Burgos", 42.3439, -3.6969], ["León", 42.5987, -5.5671], ["Cáceres", 39.4753, -6.3724], ["Badajoz", 38.8794, -6.9707], ["Toledo", 39.8628, -4.0273], ["Albacete", 38.9943, -1.8585], ["Almería", 36.834, -2.4637], ["Huelva", 37.2614, -6.9447], ["Cádiz", 36.527, -6.2886], ["Jaén", 37.7796, -3.7849], ["Girona", 41.9794, 2.8214], ["Lleida", 41.6176, 0.62], ["Tarragona", 41.1189, 1.2445], ["Castellón de la Plana", 39.9864, -0.0513], ["Huesca", 42.1401, -0.4089], ["Teruel", 40.3456, -1.1065], ["Soria", 41.7636, -2.4649], ["Segovia", 40.9429, -4.1088], ["Ávila", 40.6565, -4.6818], ["Zamora", 41.5033, -5.7446], ["Palencia", 42.0095, -4.5288], ["Cuenca", 40.0704, -2.1374], ["Guadalajara", 40.6333, -3.1667], ["Ciudad Real", 38.9848, -3.9274], ["Lugo", 43.0097, -7.556], ["Ourense", 42.3358, -7.8639], ["Pontevedra", 42.431, -8.6444], ["Santa Cruz de Tenerife", 28.4636, -16.2518], ["Las Palmas de Gran Canaria", 28.1235, -15.4363]];
+
+function fillProvinces() {
+  const ps = [...new Set(RACES.filter(r => !F.ccaa || r.ccaa === F.ccaa).map(r => r.province).filter(Boolean))].sort((a, b) => a.localeCompare(b, "es"));
+  if (F.prov && !ps.includes(F.prov)) F.prov = "";
+  $("#prov").innerHTML = `<option value="">Todas</option>` + ps.map(p => `<option ${p === F.prov ? "selected" : ""}>${esc(p)}</option>`).join("");
+}
 
 // ------------------------------------------------------------------ filtros
 function weekendRange(offset) {
@@ -117,6 +124,7 @@ function apply() {
       if (!ok) return false;
     }
     if (F.ccaa && r.ccaa !== F.ccaa) return false;
+    if (F.prov && r.province !== F.prov) return false;
     if (F.fav && !favs.has(r.id)) return false;
     if (q.length && !q.every(w => r._s.includes(w))) return false;
     if (F.near) {
@@ -131,8 +139,12 @@ function apply() {
   $("#list").innerHTML = "";
   renderMore();
   const n = filtered.length;
-  $("#count").innerHTML = `<span class="num">${n.toLocaleString("es-ES")}</span>${n === 1 ? "carrera" : "carreras"}`;
+  $("#count").innerHTML = `<span class="num">${n.toLocaleString("es-ES")}</span><span class="lbl">${n === 1 ? "carrera" : "carreras"}${F.fav ? " favoritas" : ""}</span>`;
+  $("#applyFilters").textContent = `Ver ${n.toLocaleString("es-ES")} ${n === 1 ? "carrera" : "carreras"}`;
+  $("#filtersBadge").hidden = !(F.when !== "all" || F.ccaa || F.prov || F.near || F.mapOnly);
+  $$(".chip[data-when]").forEach(b => b.classList.toggle("on", F.when === b.dataset.when));
   drawMarkers();
+  if (map && !$("#viewMap").hidden && !F.mapOnly) { mapTouched = false; fitToResults(); }
   saveFilters();
 }
 
@@ -143,7 +155,7 @@ function syncFilterUI() {
   $("#when").value = F.when; $("#dateRange").hidden = F.when !== "custom";
   $("#dFrom").value = F.from; $("#dTo").value = F.to;
   $("#ccaa").value = F.ccaa; $("#nearKm").value = String(F.nearKm);
-  $("#favOnly").setAttribute("aria-pressed", String(F.fav));
+  fillProvinces();
   $("#mapFilter").checked = F.mapOnly;
 }
 
@@ -155,7 +167,20 @@ function bindFilters() {
   $("#when").addEventListener("change", e => { F.when = e.target.value; $("#dateRange").hidden = F.when !== "custom"; apply(); });
   $("#dFrom").addEventListener("change", e => { F.from = e.target.value; apply(); });
   $("#dTo").addEventListener("change", e => { F.to = e.target.value; apply(); });
-  $("#ccaa").addEventListener("change", e => { F.ccaa = e.target.value; apply(); });
+  $("#ccaa").addEventListener("change", e => { F.ccaa = e.target.value; fillProvinces(); apply(); });
+  $("#prov").addEventListener("change", e => { F.prov = e.target.value; apply(); });
+  $$(".chip[data-when]").forEach(b => b.addEventListener("click", () => { F.when = F.when === b.dataset.when ? "all" : b.dataset.when; syncFilterUI(); apply(); }));
+  $("#openFilters").addEventListener("click", () => openFilterSheet(true));
+  $("#scrim").addEventListener("click", () => openFilterSheet(false));
+  $("#applyFilters").addEventListener("click", () => { openFilterSheet(false); $("#viewList").scrollTop = 0; });
+  $("#useGps").addEventListener("click", () => {
+    if (!navigator.geolocation) return toast("Este navegador no da la ubicación; escribe tu pueblo");
+    $("#useGps").textContent = "Buscando tu ubicación…";
+    navigator.geolocation.getCurrentPosition(pos => {
+      F.near = { name: "Mi ubicación", lat: pos.coords.latitude, lon: pos.coords.longitude };
+      $("#nearTown").value = "Mi ubicación"; $("#useGps").textContent = "Usar mi ubicación"; apply();
+    }, () => { $("#useGps").textContent = "Usar mi ubicación"; toast("No se pudo obtener la ubicación; escribe tu pueblo"); }, { timeout: 10000, maximumAge: 600000 });
+  });
   $("#nearTown").addEventListener("change", e => {
     const v = fold(e.target.value.trim());
     F.near = v ? (TOWNS.get(v) || [...TOWNS.values()].find(x => fold(x.name).startsWith(v)) || null) : null;
@@ -164,16 +189,16 @@ function bindFilters() {
     apply();
   });
   $("#nearKm").addEventListener("change", e => { F.nearKm = +e.target.value; apply(); });
-  $("#favOnly").addEventListener("click", () => { F.fav = !F.fav; $("#favOnly").setAttribute("aria-pressed", String(F.fav)); apply(); });
   $("#mapFilter").addEventListener("change", e => { F.mapOnly = e.target.checked; apply(); });
   $("#clearFilters").addEventListener("click", () => {
-    Object.assign(F, { q: "", when: "all", from: "", to: "", ccaa: "", near: null, fav: false, mapOnly: false });
+    Object.assign(F, { q: "", when: "all", from: "", to: "", ccaa: "", prov: "", near: null, mapOnly: false });
     F.surf.clear(); F.cats.clear(); $("#nearTown").value = ""; syncFilterUI(); apply();
   });
   $("#more").addEventListener("click", renderMore);
-  new IntersectionObserver(es => { if (es[0].isIntersecting && shown < filtered.length) renderMore(); }, { root: $("#listPane"), rootMargin: "400px" }).observe($("#more"));
+  new IntersectionObserver(es => { if (es[0].isIntersecting && shown < filtered.length) renderMore(); }, { root: $("#viewList"), rootMargin: "600px" }).observe($("#more"));
 }
 const toggleSet = (s, v) => (s.has(v) ? s.delete(v) : s.add(v));
+function openFilterSheet(on) { $("#filterSheet").hidden = !on; $("#scrim").hidden = !on; }
 
 // ------------------------------------------------------------------ lista
 function weekKey(s) { // lunes de esa semana
@@ -272,7 +297,15 @@ function initMap() {
   baseLayers(map);
   markerLayer = L.layerGroup().addTo(map);
   map.on("moveend", () => { if (F.mapOnly) apply(); });
-  if (F.ccaa === "" && !F.near) map.fitBounds([[35.9, -9.4], [43.8, 3.4]]);
+  map.on("dragstart zoomstart", e => { if (e.originalEvent || map._userAction) mapTouched = true; });
+  map.getContainer().addEventListener("pointerdown", () => { mapTouched = true; });
+}
+let mapTouched = false;
+function fitToResults() { // encuadra lo filtrado (o la península si hay muchos puntos dispersos)
+  const pts = filtered.filter(r => r.lat).map(r => [r.lat, r.lon]);
+  if (F.near) map.setView([F.near.lat, F.near.lon], F.nearKm > 100 ? 7 : F.nearKm > 40 ? 8 : 9);
+  else if (pts.length && pts.length < 400) map.fitBounds(pts, { padding: [30, 30], maxZoom: 11 });
+  else map.fitBounds([[36.0, -9.3], [43.8, 3.3]]);
 }
 function drawMarkers() {
   if (!map) return;
@@ -287,53 +320,86 @@ function drawMarkers() {
       dashArray: r.approx ? "2 2" : null,
     });
     m.bindTooltip(`<b>${esc(r.name)}</b><br>${fmtShort(r.date)} · ${esc(r.city || r.province || "")}`, { direction: "top" });
-    m.on("click", () => openRace(r.id, false));
+    m.on("click", () => showMapCard(r));
     m.addTo(markerLayer);
   }
 }
 
+function showMapCard(r) {
+  selId = r.id; drawMarkers();
+  let box = $("#mapCard");
+  if (!box) { box = document.createElement("div"); box.id = "mapCard"; box.className = "map-card"; $("#viewMap").appendChild(box); }
+  box.innerHTML = cardHTML(r); box.hidden = false;
+  box.querySelector(".card").onclick = e => { if (e.target.closest("[data-fav]")) { toggleFav(r.id); return; } openRace(r.id); };
+}
+
+// ------------------------------------------------------------------ pantallas y botón "atrás"
+// Cada pantalla abierta (ficha, plan, mis planes) añade una entrada al historial: el botón atrás del móvil la cierra.
+const STACK = [];
+function pushScreen(name, close) { STACK.push({ name, close }); history.pushState({ s: name }, ""); }
+function popScreen(name) { // cierre desde un botón de la app
+  const i = STACK.map(x => x.name).lastIndexOf(name);
+  if (i < 0) return;
+  STACK.splice(i, 1)[0].close();
+  if (history.state?.s === name) { ignorePop = true; history.back(); }
+}
+let ignorePop = false;
+addEventListener("popstate", () => {
+  if (ignorePop) { ignorePop = false; return; }
+  const top = STACK.pop(); if (top) top.close();
+});
+
 // ------------------------------------------------------------------ ficha
-function openRace(id, fly) {
+let rmap = null;
+function openRace(id) {
   const r = BYID.get(id); if (!r) return;
   selId = id;
   $$(".card.sel").forEach(c => c.classList.remove("sel"));
   $(`.card[data-id="${id}"]`)?.classList.add("sel");
-  drawMarkers();
-  if (fly && map && r.lat && innerWidth > 760) map.flyTo([r.lat, r.lon], Math.max(map.getZoom(), 9), { duration: 0.6 });
   const surf = r.surface === "trail" ? "Trail / montaña" : "Asfalto";
   const where = [r.city, r.province, r.ccaa].filter(Boolean).filter((x, i, a) => a.indexOf(x) === i).join(", ");
   const off = r.web || r.reg;
   const gmaps = r.lat ? `https://www.google.com/maps/search/?api=1&query=${r.lat},${r.lon}` : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(where)}`;
   const sheet = $("#sheet");
   sheet.innerHTML = `
-    <div class="sheet-top"><span class="pill ${r.surface === "trail" ? "trail" : "road"}">${surf}</span><button class="x" id="closeSheet" type="button" aria-label="Cerrar">✕</button></div>
-    ${r.img ? `<img class="hero-img" src="${esc(r.img)}" alt="" loading="lazy" onerror="this.remove()">` : ""}
-    <h2>${esc(r.name)}</h2>
-    <dl class="facts">
-      <dt>Fecha</dt><dd>${fmtDate(r.date)}${r.time ? ` · ${esc(r.time)} h` : ""}</dd>
-      <dt>Lugar</dt><dd>${esc(where || "Por confirmar")}${r.approx ? ' <span class="muted small">(aprox.)</span>' : ""}</dd>
-      <dt>Distancias</dt><dd>${(r.dist || []).length ? r.dist.map(d => `<span class="km">${fmtDist(d)}</span>`).join(" ") : '<span class="muted">Consultar</span>'}</dd>
-      ${r.elev ? `<dt>Desnivel</dt><dd>+${r.elev} m</dd>` : ""}
-      ${r.kind && !/^\d/.test(r.kind) ? `<dt>Tipo</dt><dd>${esc(r.kind)}</dd>` : ""}
-    </dl>
-    ${r.desc ? `<p class="note">${esc(r.desc)}</p>` : ""}
-    <div class="actions">
-      <button class="btn primary" id="planIt" type="button">Planificar finde</button>
-      <button class="btn ghost" data-fav="${r.id}" type="button">${favs.has(r.id) ? "♥ Favorita" : "♡ Guardar"}</button>
-    </div>
-    <div class="actions">
-      ${off ? `<a class="btn ghost small" href="${esc(off)}" target="_blank" rel="noopener">Web oficial ↗</a>` : ""}
-      ${r.reg && r.reg !== off ? `<a class="btn ghost small" href="${esc(r.reg)}" target="_blank" rel="noopener">Inscripción ↗</a>` : ""}
-      <a class="btn ghost small" href="${gmaps}" target="_blank" rel="noopener">Google Maps ↗</a>
-      <a class="btn ghost small" href="https://www.google.com/search?q=${encodeURIComponent(r.name + " " + pd(r.date).getFullYear())}" target="_blank" rel="noopener">Buscar en Google ↗</a>
-    </div>
-    <p class="src-list">Fuentes: ${(r.src || []).map(s => `<a href="${esc(s.u)}" target="_blank" rel="noopener">${esc(s.n)}</a>`).join(" · ")}</p>`;
-  sheet.hidden = false;
+    <div class="bar"><button class="x" id="closeSheet" type="button" aria-label="Volver">←</button><h2>${fmtShort(r.date)}</h2>
+      <button class="fav${favs.has(r.id) ? " on" : ""}" data-fav="${r.id}" type="button" aria-label="Favorita">${favs.has(r.id) ? "♥" : "♡"}</button></div>
+    <div class="screen-body">
+      ${r.img ? `<img class="hero-img" src="${esc(r.img)}" alt="" loading="lazy" onerror="this.remove()">` : ""}
+      <span class="pill ${r.surface === "trail" ? "trail" : "road"}">${surf}</span>
+      <h1 class="race-title">${esc(r.name)}</h1>
+      <dl class="facts">
+        <dt>Fecha</dt><dd>${fmtDate(r.date)}${r.time ? ` · ${esc(r.time)} h` : ""}</dd>
+        <dt>Lugar</dt><dd>${esc(where || "Por confirmar")}${r.approx ? ' <span class="muted small">(aprox.)</span>' : ""}</dd>
+        <dt>Distancias</dt><dd>${(r.dist || []).length ? r.dist.map(d => `<span class="km">${fmtDist(d)}</span>`).join(" ") : '<span class="muted">Consultar</span>'}</dd>
+        ${r.elev ? `<dt>Desnivel</dt><dd>+${r.elev} m</dd>` : ""}
+        ${r.kind && !/^\d/.test(r.kind) ? `<dt>Tipo</dt><dd>${esc(r.kind)}</dd>` : ""}
+      </dl>
+      <button class="btn primary block" id="planIt" type="button">Planificar finde: correr · dormir · comer</button>
+      ${r.lat ? `<div id="raceMap"></div>` : ""}
+      ${r.desc ? `<p class="note">${esc(r.desc)}</p>` : ""}
+      <div class="actions">
+        ${off ? `<a class="btn ghost small" href="${esc(off)}" target="_blank" rel="noopener">Web oficial ↗</a>` : ""}
+        ${r.reg && r.reg !== off ? `<a class="btn ghost small" href="${esc(r.reg)}" target="_blank" rel="noopener">Inscripción ↗</a>` : ""}
+        <a class="btn ghost small" href="${gmaps}" target="_blank" rel="noopener">Cómo llegar ↗</a>
+        <a class="btn ghost small" href="https://www.google.com/search?q=${encodeURIComponent(r.name + " " + pd(r.date).getFullYear())}" target="_blank" rel="noopener">Buscar en Google ↗</a>
+      </div>
+      <p class="src-list">Aparece en: ${(r.src || []).map(s => `<a href="${esc(s.u)}" target="_blank" rel="noopener">${esc(s.n)}</a>`).join(" · ")}</p>
+    </div>`;
+  sheet.hidden = false; sheet.scrollTop = 0;
+  if (!STACK.some(x => x.name === "race")) pushScreen("race", hideRace);
   $("#closeSheet").onclick = closeSheet;
-  $("#planIt").onclick = () => { closeSheet(); openPlan(newPlan(r)); };
-  sheet.querySelector("[data-fav]").onclick = e => { toggleFav(r.id); e.target.textContent = favs.has(r.id) ? "♥ Favorita" : "♡ Guardar"; };
+  $("#planIt").onclick = () => openPlan(newPlan(r));
+  sheet.querySelector("[data-fav]").onclick = e => { toggleFav(r.id); };
+  if (r.lat && window.L) {
+    if (rmap) { rmap.remove(); rmap = null; }
+    rmap = L.map("raceMap", { preferCanvas: true, zoomControl: false, attributionControl: false, dragging: false, scrollWheelZoom: false, doubleClickZoom: false, touchZoom: false }).setView([r.lat, r.lon], r.approx ? 8 : 12);
+    baseLayers(rmap);
+    L.marker([r.lat, r.lon], { icon: L.divIcon({ className: "", html: `<div class="pin run">${ICON_RUN}</div>`, iconSize: [30, 30], iconAnchor: [15, 30] }) }).addTo(rmap);
+  }
 }
-function closeSheet() { $("#sheet").hidden = true; }
+function hideRace() { $("#sheet").hidden = true; if (rmap) { rmap.remove(); rmap = null; } }
+function closeSheet() { popScreen("race"); }
 
 // ------------------------------------------------------------------ planes
 const uid = () => Math.random().toString(36).slice(2, 10);
@@ -371,11 +437,13 @@ let P = null, pmap = null, pLayers = {};
 function openPlan(p, readonly = false) {
   P = p;
   const v = $("#planView");
-  v.hidden = false; document.body.style.overflow = "hidden";
+  v.hidden = false; v.scrollTop = 0;
+  if (!STACK.some(x => x.name === "plan")) pushScreen("plan", hidePlan);
   renderPlan();
   if (!readonly && !plans[p.id]) savePlan(p);
 }
-function closePlan() { $("#planView").hidden = true; document.body.style.overflow = ""; if (pmap) { pmap.remove(); pmap = null; } P = null; }
+function closePlan() { popScreen("plan"); }
+function hidePlan() { $("#planView").hidden = true; if (pmap) { pmap.remove(); pmap = null; } P = null; if (!$("#plansView").hidden) openPlans(); }
 
 function nightsOf(p) { return Math.max(0, Math.round((pd(p.leave) - pd(p.arrive)) / 864e5)); }
 
@@ -386,13 +454,22 @@ function renderPlan() {
   const originT = p.origin ? TOWNS.get(fold(p.origin)) : null;
   const travelKm = originT && r.lat ? haversine(originT.lat, originT.lon, r.lat, r.lon) * 1.25 : null;
   v.innerHTML = `
-  <div class="pv-bar">
-    <button class="x" id="pvClose" type="button" aria-label="Cerrar plan">←</button>
+  <div class="bar">
+    <button class="x" id="pvClose" type="button" aria-label="Volver">←</button>
     <input class="title-in" id="pTitle" value="${esc(p.title)}" aria-label="Nombre del plan">
-    <button class="btn primary" id="pvShare" type="button">Compartir</button>
+    <button class="icon-btn" id="pvShare" type="button" aria-label="Compartir"><svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></svg></button>
   </div>
-  <div class="pv-wrap">
-    <div class="pv-main">
+  <nav class="seg" id="seg">
+    <a href="#secRun" class="on"><i style="background:var(--accent)"></i>Correr</a>
+    <a href="#secSleep"><i style="background:var(--stay)"></i>Dormir</a>
+    <a href="#secEat"><i style="background:var(--eat)"></i>Comer</a>
+    <a href="#secPlan"><i style="background:var(--muted)"></i>Itinerario</a>
+    <a href="#secBag"><i style="background:var(--muted)"></i>Mochila</a>
+    <a href="#secMoney"><i style="background:var(--muted)"></i>Gastos</a>
+    <a href="#shareBox"><i style="background:var(--accent)"></i>Compartir</a>
+  </nav>
+  <div class="screen-body">
+      <div id="planMap"></div>
       <section class="panel" id="secRun">
         <div class="panel-h"><span class="tag run"></span><h2>Correr</h2><span class="sub">${fmtDate(r.date)}</span></div>
         <div class="pick set"><span class="ico run">${ICON_RUN}</span>
@@ -447,7 +524,7 @@ function renderPlan() {
         </div>
       </section>
 
-      <section class="panel">
+      <section class="panel" id="secPlan">
         <div class="panel-h"><span class="tag todo"></span><h2>Itinerario</h2></div>
         ${timelineHTML(p)}
         <div class="tl-add">
@@ -458,13 +535,13 @@ function renderPlan() {
         <label class="field" style="margin-top:6px">Día<select id="evDay">${daysOf(p).map(d => `<option value="${d}">${fmtShort(d)}</option>`).join("")}</select></label>
       </section>
 
-      <section class="panel">
+      <section class="panel" id="secBag">
         <div class="panel-h"><span class="tag todo"></span><h2>Mochila</h2><span class="sub">${p.check.filter(c => c.d).length}/${p.check.length}</span></div>
         <ul class="check">${p.check.map((c, i) => `<li class="${c.d ? "done" : ""}"><label><input type="checkbox" data-ck="${i}" ${c.d ? "checked" : ""}><span>${esc(c.t)}</span></label></li>`).join("")}</ul>
         <div class="toolbar"><input id="newCk" placeholder="Añadir a la lista" style="flex:1;background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:6px 10px"><button class="btn ghost small" id="addCk" type="button">Añadir</button></div>
       </section>
 
-      <section class="panel">
+      <section class="panel" id="secMoney">
         <div class="panel-h"><span class="tag todo"></span><h2>Presupuesto y notas</h2></div>
         <div class="grid2">
           ${[["fee", "Inscripción (total €)"], ["travel", "Viaje (€)"], ["stay", "Alojamiento (€)"], ["food", "Comidas (€)"]].map(([k, l]) => `<label class="field">${l}<input type="number" min="0" step="1" data-cost="${k}" value="${esc(p.cost[k])}"></label>`).join("")}
@@ -472,15 +549,12 @@ function renderPlan() {
         ${budgetHTML(p)}
         <label class="field" style="margin-top:12px">Notas<textarea id="pNotes" placeholder="Parking, recogida de dorsal, quién lleva el coche…">${esc(p.notes)}</textarea></label>
       </section>
-    </div>
-
-    <aside class="pv-side">
-      <div id="planMap"></div>
       <section class="panel share-box" id="shareBox">
         <div class="panel-h"><span class="tag run"></span><h2>Compartir</h2></div>
         <p class="small muted" style="margin:0">Todo el plan (carrera, alojamiento, comidas, itinerario, mochila y notas) va dentro del enlace. Quien lo abra puede guardarlo como suyo.</p>
         <div class="share-row">
-          <button class="btn primary small" id="shLink" type="button">Copiar enlace</button>
+          <button class="btn primary wide" id="shSend" type="button">Enviar plan (WhatsApp, Telegram…)</button>
+          <button class="btn ghost small" id="shLink" type="button">Copiar enlace</button>
           <button class="btn ghost small" id="shText" type="button">Copiar resumen</button>
           <button class="btn ghost small" id="shIcs" type="button">Calendario (.ics)</button>
           <button class="btn ghost small" id="shJson" type="button">Exportar archivo</button>
@@ -489,7 +563,6 @@ function renderPlan() {
         <details><summary class="small muted">Código del plan (para pegar en «Importar»)</summary><div class="code" id="planCode">…</div></details>
         <button class="link-btn small" id="pDelete" type="button">Borrar este plan</button>
       </section>
-    </aside>
   </div>`;
   bindPlan();
   drawPlanMap();
@@ -570,6 +643,18 @@ function bindPlan() {
   const commit = (rerender = true) => { savePlan(p); if (rerender) { const y = v.scrollTop; renderPlan(); v.scrollTop = y; } else refreshShare(); };
   $("#pvClose").onclick = closePlan;
   $("#pvShare").onclick = () => $("#shareBox").scrollIntoView({ behavior: "smooth" });
+  $$("#seg a").forEach(a => a.onclick = e => { e.preventDefault(); $(a.getAttribute("href")).scrollIntoView({ behavior: "smooth", block: "start" }); });
+  const secs = $$("#seg a").map(a => $(a.getAttribute("href")));
+  v.onscroll = () => { // resalta la pestaña de la sección visible
+    const y = v.scrollTop + 140; let cur = secs[0];
+    for (const s of secs) if (s.offsetTop <= y) cur = s;
+    $$("#seg a").forEach(a => a.classList.toggle("on", a.getAttribute("href") === "#" + cur.id));
+  };
+  $("#shSend").onclick = async () => {
+    const url = await planURL(p);
+    if (navigator.share && !EMBED) { try { await navigator.share({ title: p.title, text: planText(p), url: url.startsWith("http") ? url : undefined }); return; } catch { /* cancelado */ } }
+    copy(`${planText(p)}\n\n${url}`, "Plan copiado: pégalo en WhatsApp o Telegram");
+  };
   $("#pTitle").oninput = e => { p.title = e.target.value; commit(false); };
   $("#pDist").onchange = e => { p.chosen = e.target.value ? +e.target.value : null; commit(false); };
   $("#pPeople").onchange = e => { p.people = Math.max(1, +e.target.value || 1); commit(); };
@@ -675,7 +760,8 @@ async function searchStay() {
   const types = $("#stayType").value, R = $("#stayR").value;
   const q = `[out:json][timeout:25];nwr["tourism"~"^(${types})$"](around:${R},${r.lat},${r.lon});out center tags 80;`;
   try {
-    const list = (await overpass(q)).map(e => osmPlace(e, r)).filter(x => x.lat).sort((a, b) => a._d - b._d).slice(0, 40);
+    const list = (await overpass(q)).map(e => osmPlace(e, r)).filter(x => x.lat)
+      .sort((a, b) => (!a._t.name - !b._t.name) || a._d - b._d).slice(0, 40); // primero los que tienen nombre
     box.innerHTML = resultsHTML(list, "sleep"); showCandidates(list, "sleep");
   } catch {
     box.innerHTML = `<p class="small muted">No se pudo consultar OpenStreetMap desde aquí. Usa los botones de Booking, Airbnb o Google.</p>`;
@@ -789,9 +875,9 @@ async function handleIncomingPlan() {
 function openSharedPlan(p) {
   const exists = plans[p.id];
   openPlan(p, true);
-  const bar = $(".pv-bar");
+  const bar = $("#planView .bar");
   const b = document.createElement("button");
-  b.className = "btn ghost"; b.type = "button"; b.textContent = exists ? "Actualizar mi copia" : "Guardar en mis planes";
+  b.className = "btn primary small"; b.type = "button"; b.textContent = exists ? "Actualizar" : "Guardar";
   b.onclick = () => { savePlan(P); b.remove(); toast("Plan guardado en «Mis planes»"); };
   bar.insertBefore(b, $("#pvShare"));
 }
@@ -800,40 +886,45 @@ function openSharedPlan(p) {
 function openPlans() {
   const v = $("#plansView");
   const list = Object.values(plans).sort((a, b) => a.race.date.localeCompare(b.race.date));
-  v.innerHTML = `<div class="pv-bar"><button class="x" id="plClose" type="button" aria-label="Volver">←</button><h2 style="flex:1;font-size:24px">Mis planes</h2></div>
-    <div class="plans-grid">${list.length ? list.map(p => `<article class="plan-card"><span class="muted small">${fmtDate(p.race.date)}${p.race.date < today ? " · pasado" : ""}</span><h3>${esc(p.title)}</h3><span class="small">${esc(p.race.name)}</span>
+  v.innerHTML = `<div class="bar"><h2>Mis planes</h2></div>
+    <div class="screen-body"><div class="plans-list">${list.length ? list.map(p => `<article class="plan-card"><span class="muted small">${fmtDate(p.race.date)}${p.race.date < today ? " · pasado" : ""}</span><h3>${esc(p.title)}</h3><span class="small">${esc(p.race.name)}</span>
       <div class="trio"><span class="r">Correr${p.chosen ? " " + fmtDist(p.chosen) : ""}</span><span class="${p.stay ? "s" : "off"}">Dormir</span><span class="${p.meals.some(m => m.place) ? "e" : "off"}">Comer ${p.meals.filter(m => m.place).length}/${p.meals.length}</span></div>
       <div class="share-row"><button class="btn primary small" data-open="${p.id}" type="button">Abrir</button><button class="btn ghost small" data-share="${p.id}" type="button">Copiar enlace</button></div></article>`).join("")
-      : `<p class="empty" style="grid-column:1/-1">Aún no tienes planes. Abre una carrera y pulsa «Planificar finde».</p>`}</div>
-    <div class="import panel"><div class="panel-h"><span class="tag todo"></span><h2>Importar un plan</h2></div>
+      : `<p class="empty">Aún no tienes planes. Abre una carrera y pulsa «Planificar finde».</p>`}</div>
+    <div class="panel" style="margin-top:14px"><div class="panel-h"><span class="tag todo"></span><h2>Importar un plan</h2></div>
       <p class="small muted" style="margin-top:0">Pega aquí un enlace o código de plan que te hayan pasado, o carga un archivo exportado.</p>
       <div class="toolbar"><input id="impCode" placeholder="https://…?plan=z…  o  z…" style="flex:1;min-width:200px;background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:8px 10px">
       <button class="btn primary small" id="impGo" type="button">Abrir plan</button>
-      <label class="btn ghost small" for="impFile">Cargar archivo</label><input id="impFile" type="file" accept=".json,application/json" hidden></div></div>`;
+      <label class="btn ghost small" for="impFile">Cargar archivo</label><input id="impFile" type="file" accept=".json,application/json" hidden></div></div></div>`;
   v.hidden = false;
-  $("#plClose").onclick = () => { v.hidden = true; setTab("list"); };
-  $$("[data-open]", v).forEach(b => b.onclick = () => { v.hidden = true; openPlan(plans[b.dataset.open]); });
+  $$("[data-open]", v).forEach(b => b.onclick = () => openPlan(plans[b.dataset.open]));
   $$("[data-share]", v).forEach(b => b.onclick = async () => copy(await planURL(plans[b.dataset.share]), "Enlace copiado"));
-  $("#impGo").onclick = async () => { try { const p = await decodePlan($("#impCode").value); v.hidden = true; openSharedPlan(p); } catch { toast("No reconozco ese código de plan"); } };
-  $("#impFile").onchange = e => { const f = e.target.files[0]; if (!f) return; f.text().then(t => { const p = JSON.parse(t); if (!p.race) throw 0; v.hidden = true; openSharedPlan(p); }).catch(() => toast("Ese archivo no es un plan válido")); };
+  $("#impGo").onclick = async () => { try { const p = await decodePlan($("#impCode").value); openSharedPlan(p); } catch { toast("No reconozco ese código de plan"); } };
+  $("#impFile").onchange = e => { const f = e.target.files[0]; if (!f) return; f.text().then(t => { const p = JSON.parse(t); if (!p.race) throw 0; openSharedPlan(p); }).catch(() => toast("Ese archivo no es un plan válido")); };
 }
 
 // ------------------------------------------------------------------ vistas móvil
 function setTab(view) {
   $$(".tabbar button").forEach(b => b.classList.toggle("on", b.dataset.view === view));
-  $("#split").classList.toggle("show-map", view === "map");
-  if (view === "map" && map) setTimeout(() => map.invalidateSize(), 30);
-  if (view === "plans") openPlans(); else $("#plansView").hidden = true;
+  while (STACK.length) STACK.pop().close();
+  $("#viewMap").hidden = view !== "map";
+  $("#viewList").hidden = view === "map";
+  $("#plansView").hidden = view !== "plans";
+  if (view === "plans") openPlans();
+  const fav = view === "fav";
+  if (fav !== F.fav) { F.fav = fav; apply(); }
+  if (view === "map" && map) setTimeout(() => { map.invalidateSize(); if (!mapTouched) fitToResults(); }, 30);
+  if (view !== "map" && $("#mapCard")) $("#mapCard").hidden = true;
 }
 
 // ------------------------------------------------------------------ init
 function init() {
   $("#plansCount").textContent = Object.keys(plans).length;
   bindFilters(); bindList();
-  $("#openPlans").onclick = () => setTab("plans");
-  $("#brandLink").onclick = e => { e.preventDefault(); closeSheet(); $("#plansView").hidden = true; if (P) closePlan(); setTab("list"); };
+  $("#brandLink").onclick = e => { e.preventDefault(); setTab("list"); $("#viewList").scrollTop = 0; };
+  F.fav = false;
   $$(".tabbar button").forEach(b => b.onclick = () => setTab(b.dataset.view));
-  document.addEventListener("keydown", e => { if (e.key === "Escape") { if (!$("#sheet").hidden) closeSheet(); else if (P) closePlan(); } });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") { if (!$("#filterSheet").hidden) openFilterSheet(false); else if (STACK.length) history.back(); } });
   if ("serviceWorker" in navigator && location.protocol === "https:" && !/claude|artifact/.test(location.host)) navigator.serviceWorker.register("sw.js").catch(() => {});
   load();
 }

@@ -140,7 +140,7 @@ def guess_surface(*texts) -> str:
 
 HARD_EXCLUDE = re.compile(
     r"\b(btt|mtb|bike|bici|ciclis|cicloturis|gravel|triatl|triathl|duatl|duathl|acuatl|aquathl|nataci|swim|a nado|"
-    r"orientaci|rogaine|esqu[ií]|skimo|p[aá]del|virtual|h[ií]pica|patina|ciclocross|carretera btt)",
+    r"orientaci|rogaine|esqu[ií]|skimo|p[aá]del|virtual|h[ií]pica|patina|ciclocross|carretera btt|grabaci[oó]n medalla)",
     re.I,
 )
 SOFT_EXCLUDE = re.compile(r"marcha|marxa|n[oó]rdic|senderis|caminada|caminata|walk|paseo|andada", re.I)

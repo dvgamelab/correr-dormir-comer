@@ -6,6 +6,12 @@ Proyecto personal, sin monetización.
 
 ## Qué hace
 
+**App móvil en vertical.** Se instala en el móvil desde el navegador ("Añadir a pantalla de inicio"), se abre a pantalla completa, está bloqueada en vertical y el botón *atrás* del móvil cierra pantallas. En ordenador se ve como una columna de teléfono.
+
+- Barra inferior: **Carreras · Mapa · Favoritas · Planes**.
+- Chips deslizables: este finde, asfalto/trail, 5K, 10K, media, maratón, ultra.
+- Botón **Filtros** (hoja inferior): fechas, comunidad, provincia, cerca de un pueblo o de **tu ubicación GPS**, radio.
+
 **Explorar**
 - Lista agrupada por fin de semana ("Este finde", "Próximo finde"…) junto a un mapa de España con todas las carreras.
 - Filtros: superficie (asfalto/trail), distancia (5K, 10K, media, maratón, ultra, otras), fecha (este finde, próximo, 30 días, 3 meses o fechas a medida), comunidad autónoma, "cerca de" un pueblo con radio (25–200 km), texto libre y favoritas.
@@ -38,13 +44,16 @@ Funciona como PWA: se puede instalar en el móvil y usar sin conexión con los d
 | [CarrerasPopulares.com](https://carreraspopulares.com/calendario_carreras) | Carreras populares, servicios y enlace de inscripción |
 | [Runnea](https://www.runnea.com/carreras-populares/calendario/) | Grandes carreras verificadas (maratones, medias, trails de referencia) |
 | [Corriendo Voy](https://corriendovoy.com/calendario-de-carreras/) | Calendario WordPress con hora de salida |
+| [Foro Runners](https://www.fororunners.es/events/lista/) | API REST de su calendario: hora, precio y web oficial (muy completo en Madrid) |
 
 - Se descarta lo que no es correr: BTT, ciclismo, triatlón, duatlón, natación, orientación, esquí, virtuales y marchas no competitivas.
 - Coordenadas: las de la fuente si las trae. Si no, las de otra carrera del mismo pueblo, o se buscan en Photon (Komoot, OSM) con Nominatim de respaldo y caché en `data/cache/geocode.json`. Como último recurso se usa el centro de la provincia, y el mapa marca esas carreras como "ubicación aproximada".
 - La provincia se calcula por polígono con los límites del IGN, así que no depende de cómo la escriba cada web.
+- **Duplicados**: una misma carrera suele aparecer en 2-5 webs con nombres distintos ("XVI Carrera Solidaria de la Ilusión" / "Carrera Solidaria de la Ilusión"). Se unen automáticamente si coinciden fecha (o ±1 día con nombre casi idéntico), sitio (GPS a menos de 12 km, mismo pueblo o misma provincia si falta el dato) y alguna palabra distintiva del nombre. Las palabras que salen en muchas carreras ("San Silvestre", "Volta a Peu", "contra el Cáncer") se detectan solas y no cuentan. También se entienden variantes bilingües (Castelló/Castellón, Mitja/Media, Platja/Playa). Nunca se unen dos carreras con GPS separadas más de 25 km ni con distancias incompatibles.
+- Cada ejecución deja `data/dedupe_report.json` con qué se ha unido y por qué, y `python tools/check_dupes.py` lista fusiones dudosas y posibles duplicados sin unir para revisarlos.
 - Si una fuente falla, se reutiliza su último volcado (`data/raw/*.json`) y la app lo indica en el pie de la lista.
 
-Fuentes que se probaron y no se usan todavía: ClubRunning, CarrerasPorMontaña y Ahotu tienen captcha o Cloudflare. Runnun guarda los datos dentro de su app. RockTheSport y Sportmaniacs exigen credenciales en su API, aunque muchas de sus carreras entran vía running.life. TrailRun.es no tiene calendario publicado. Se pueden añadir como un módulo más en `scraper/sources/`.
+Fuentes que se probaron y no se usan todavía: Carreiras Galegas (su clave de búsqueda pública está caducada), ClubRunning, CarrerasPorMontaña y Ahotu tienen captcha o Cloudflare. Runnun guarda los datos dentro de su app. RockTheSport y Sportmaniacs exigen credenciales en su API, aunque muchas de sus carreras entran vía running.life. TrailRun.es no tiene calendario publicado. Se pueden añadir como un módulo más en `scraper/sources/`.
 
 ## Poner en marcha
 
