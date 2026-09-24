@@ -282,3 +282,16 @@ input[type=date],input[type=time]{min-width:0;max-width:100%}
 /* vista previa de la ficha compartible */
 .card-preview-btn{display:block;width:100%;padding:0;border:0;background:none;cursor:zoom-in}
 .card-preview{display:block;width:100%;border-radius:12px;border:1px solid var(--line);background:var(--surface-2);min-height:120px}
+
+/* Mis planes: es una pestaña (deja ver la barra inferior) y queda por debajo del plan abierto */
+#plansView{z-index:25;bottom:calc(var(--tab-h) + var(--safe-b));animation:none}
+.plan-card{cursor:pointer;transition:transform .12s,border-color .15s}
+.plan-card:active{transform:scale(.985)}
+.plan-card.past{opacity:.72}
+.plan-top{display:flex;justify-content:space-between;align-items:center}
+.plan-top .chev{font-size:26px;line-height:1;color:var(--muted)}
+.plan-actions{display:flex;gap:8px;justify-content:flex-end}
+.btn.danger{color:#C62828;border-color:color-mix(in srgb,#C62828 35%,var(--line))}
+.btn.danger.confirm{background:#C62828;color:#fff;border-color:#C62828}
+.plans-sub{font-size:18px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:10px 0 0}
+.toast .undo{margin-left:10px;background:none;border:0;color:var(--accent);font-weight:800;text-decoration:underline;cursor:pointer}

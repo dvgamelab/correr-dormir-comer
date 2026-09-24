@@ -899,7 +899,7 @@ function bindPlan() {
   $("#shIcs").onclick = () => downloadOrCopy(planICS(p), `${slug(p.title)}.ics`, "text/calendar");
   $("#shJson").onclick = () => downloadOrCopy(JSON.stringify(p, null, 2), `${slug(p.title)}.json`, "application/json");
   $("#pDelete").onclick = e => {
-    if (e.target.dataset.sure) { deletePlan(p.id); closePlan(); toast("Plan borrado"); }
+    if (e.target.dataset.sure) { const bk = plans[p.id]; deletePlan(p.id); closePlan(); if (!$("#plansView").hidden) openPlans(); if (bk) undoToast("Plan borrado", () => { savePlan(bk); if (!$("#plansView").hidden) openPlans(); }); }
     else { e.target.dataset.sure = 1; e.target.textContent = "Pulsa otra vez para borrarlo"; }
   };
   // clic en resultados (delegado)
@@ -1280,24 +1280,59 @@ function openSharedPlan(p) {
 }
 
 // ------------------------------------------------------------------ mis planes
+function planCardHTML(p) {
+  const past = p.race.date < today, eat = p.meals.filter(m => m.place).length;
+  return `<article class="plan-card${past ? " past" : ""}" data-open="${p.id}" tabindex="0" role="button" aria-label="Abrir ${esc(p.title)}">
+    <div class="plan-top"><span class="muted small">${fmtDate(p.race.date)}${past ? " · pasado" : ""}</span><span class="chev" aria-hidden="true">›</span></div>
+    <h3>${esc(p.title)}</h3><span class="small">${esc(p.race.name)}</span>
+    <div class="trio"><span class="r">Correr${p.chosen ? " " + fmtDist(p.chosen) : ""}</span><span class="${p.stay ? "s" : "off"}">Dormir</span><span class="${eat ? "e" : "off"}">Comer ${eat}/${p.meals.length}</span></div>
+    <div class="plan-actions">
+      <button class="btn ghost small" data-share="${p.id}" type="button">Compartir</button>
+      <button class="btn ghost small danger" data-del="${p.id}" type="button">Borrar</button>
+    </div></article>`;
+}
+let lastDeleted = null;
 function openPlans() {
   const v = $("#plansView");
-  const list = Object.values(plans).sort((a, b) => a.race.date.localeCompare(b.race.date));
-  v.innerHTML = `<div class="bar"><h2>Mis planes</h2></div>
-    <div class="screen-body"><div class="plans-list">${list.length ? list.map(p => `<article class="plan-card"><span class="muted small">${fmtDate(p.race.date)}${p.race.date < today ? " · pasado" : ""}</span><h3>${esc(p.title)}</h3><span class="small">${esc(p.race.name)}</span>
-      <div class="trio"><span class="r">Correr${p.chosen ? " " + fmtDist(p.chosen) : ""}</span><span class="${p.stay ? "s" : "off"}">Dormir</span><span class="${p.meals.some(m => m.place) ? "e" : "off"}">Comer ${p.meals.filter(m => m.place).length}/${p.meals.length}</span></div>
-      <div class="share-row"><button class="btn primary small" data-open="${p.id}" type="button">Abrir</button><button class="btn ghost small" data-share="${p.id}" type="button">Copiar enlace</button></div></article>`).join("")
-      : `<p class="empty">Aún no tienes planes. Abre una carrera y pulsa «Planificar finde».</p>`}</div>
+  const all = Object.values(plans).sort((a, b) => a.race.date.localeCompare(b.race.date));
+  const next = all.filter(p => p.race.date >= today), past = all.filter(p => p.race.date < today).reverse();
+  v.innerHTML = `<div class="bar"><h2>Mis planes</h2><span class="muted small">${all.length || ""}</span></div>
+    <div class="screen-body"><div class="plans-list">
+      ${all.length ? next.map(planCardHTML).join("") + (past.length ? `<h3 class="plans-sub">Pasados</h3>` + past.map(planCardHTML).join("") : "")
+        : `<p class="empty">Aún no tienes planes. Abre una carrera y pulsa «Planificar finde».</p>`}</div>
     <div class="panel" style="margin-top:14px"><div class="panel-h"><span class="tag todo"></span><h2>Importar un plan</h2></div>
       <p class="small muted" style="margin-top:0">Pega aquí un enlace o código de plan que te hayan pasado, o carga un archivo exportado.</p>
-      <div class="toolbar"><input id="impCode" placeholder="https://…?plan=z…  o  z…" style="flex:1;min-width:200px;background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:8px 10px">
+      <div class="toolbar"><input id="impCode" placeholder="https://…?plan=z…  o  z…" style="flex:1;min-width:0">
       <button class="btn primary small" id="impGo" type="button">Abrir plan</button>
       <label class="btn ghost small" for="impFile">Cargar archivo</label><input id="impFile" type="file" accept=".json,application/json" hidden></div></div></div>`;
   v.hidden = false;
-  $$("[data-open]", v).forEach(b => b.onclick = () => openPlan(plans[b.dataset.open]));
-  $$("[data-share]", v).forEach(b => b.onclick = async () => copy(await planURL(plans[b.dataset.share]), "Enlace copiado"));
+  v.onclick = async e => {
+    const del = e.target.closest("[data-del]");
+    if (del) { // borrar en dos toques, con opción de deshacer
+      e.stopPropagation();
+      if (!del.classList.contains("confirm")) {
+        $$(".confirm", v).forEach(x => { x.classList.remove("confirm"); x.textContent = "Borrar"; });
+        del.classList.add("confirm"); del.textContent = "¿Seguro? Toca para borrar"; return;
+      }
+      lastDeleted = plans[del.dataset.del]; deletePlan(del.dataset.del); openPlans();
+      undoToast(`Plan «${lastDeleted.title}» borrado`, () => { savePlan(lastDeleted); openPlans(); });
+      return;
+    }
+    const sh = e.target.closest("[data-share]");
+    if (sh) { e.stopPropagation(); shareCard(plans[sh.dataset.share]); return; }
+    const card = e.target.closest("[data-open]");
+    if (card && !e.target.closest("button,input,label")) openPlan(plans[card.dataset.open]);
+    else if (!e.target.closest(".confirm")) $$(".confirm", v).forEach(x => { x.classList.remove("confirm"); x.textContent = "Borrar"; });
+  };
+  v.onkeydown = e => { if (e.key === "Enter") { const c = e.target.closest("[data-open]"); if (c) openPlan(plans[c.dataset.open]); } };
   $("#impGo").onclick = async () => { try { const p = await decodePlan($("#impCode").value); openSharedPlan(p); } catch { toast("No reconozco ese código de plan"); } };
   $("#impFile").onchange = e => { const f = e.target.files[0]; if (!f) return; f.text().then(t => { const p = JSON.parse(t); if (!p.race) throw 0; openSharedPlan(p); }).catch(() => toast("Ese archivo no es un plan válido")); };
+}
+function undoToast(msg, undo) {
+  const t = $("#toast");
+  t.innerHTML = `${esc(msg)} <button type="button" class="undo">Deshacer</button>`; t.hidden = false;
+  t.querySelector(".undo").onclick = () => { undo(); t.hidden = true; };
+  clearTimeout(toast._t); toast._t = setTimeout(() => (t.hidden = true), 5000);
 }
 
 // ------------------------------------------------------------------ vistas móvil
