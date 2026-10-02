@@ -13,4 +13,5 @@ for (const [url, file] of Object.entries(libs)) {
 html = html.replace(/<link rel="manifest"[^>]*>\n?/, "")
   .replace('<script src="app.js"></script>', `<script>window.CDC_APP=true;window.CDC_PUBLIC_URL=${JSON.stringify(PUBLIC_URL)};window.CDC_DATA_URL=${JSON.stringify(PUBLIC_URL + "data/races.json")};</script>\n<script src="app.js"></script>`);
 writeFileSync("www/index.html", html);
+cpSync("runners", "www/runners", { recursive: true }); // tarea en segundo plano: avisos de carreras nuevas
 console.log("www/ lista →", PUBLIC_URL);

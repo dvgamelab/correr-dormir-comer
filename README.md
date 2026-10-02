@@ -1,6 +1,6 @@
 # Correr · Dormir · Comer
 
-Calendario de **todas las carreras de España que se pueden encontrar**: asfalto, trail, 5K, 10K, media, maratón y ultra. Cada semana se vuelve a recolectar y convierte cualquier carrera en un **plan de fin de semana**: correr, dormir y comer. El plan completo se comparte con un enlace.
+Calendario de **todas las carreras de España que se pueden encontrar**: asfalto, trail, 5K, 10K, media, maratón y ultra. Se vuelve a recolectar **dos veces al día**, avisa de las carreras nuevas y convierte cualquier carrera en un **plan de fin de semana**: correr, dormir y comer. El plan completo se comparte con un enlace.
 
 Proyecto personal, sin monetización.
 
@@ -24,6 +24,8 @@ Proyecto personal, sin monetización.
 **Mapa.** Al tocar un punto aparece la carrera en un panel inferior. Si en ese sitio hay varias, salen todas en lista. Al tocar una, se abre su ficha.
 
 **Explorar**
+- **Novedades**: cada carrera guarda cuándo apareció por primera vez (`data/seen.json`). Chip "Nuevas" (últimos 7 días), etiqueta NUEVA, aviso "N carreras nuevas desde tu última visita" y `web/data/news.json` con lo añadido en 30 días.
+- **Alertas**: en Filtros → "Crear alerta con estos filtros" (superficie, distancia, comunidad, provincia, cerca de un pueblo o texto). En la APK de Android una tarea en segundo plano revisa `news.json` cada ~2 horas y manda una notificación con las nuevas que encajen (o todas, según el modo elegido). En iPhone/web se ven al abrir la app.
 - Lista agrupada por fin de semana ("Este finde", "Próximo finde"…) junto a un mapa de España con todas las carreras.
 - Filtros: superficie (asfalto/trail), distancia (5K, 10K, media, maratón, ultra, otras), fecha (este finde, próximo, 30 días, 3 meses o fechas a medida), comunidad autónoma, "cerca de" un pueblo con radio (25–200 km), texto libre y favoritas.
 - "Filtrar por zona del mapa": al mover el mapa, la lista enseña solo lo visible (como en Airbnb).
@@ -85,12 +87,12 @@ cd web && python -m http.server 8000   # abre http://localhost:8000
 ```
 Para refrescar solo una fuente: `python scraper/run.py --only runedia`.
 
-### Publicado y actualizado cada semana (GitHub Pages)
+### Publicado y actualizado dos veces al día (GitHub Pages)
 1. Crea un repositorio en GitHub y sube esta carpeta.
 2. En **Settings → Pages**, elige **Source: GitHub Actions** (hay que hacerlo antes del primer despliegue).
-3. En **Actions**, lanza "Recolectar carreras (semanal) y publicar" con *Run workflow*.
+3. En **Actions**, lanza "Recolectar carreras (2 veces al día) y publicar" con *Run workflow*.
 
-A partir de ahí se ejecuta **cada lunes a las 04:00 UTC**: recolecta, guarda los datos en el repo y publica la web en `https://<usuario>.github.io/<repo>/`. Los enlaces de planes compartidos apuntan a esa URL.
+A partir de ahí se ejecuta **todos los días a las 05:00 y 17:00 UTC**: recolecta, guarda los datos en el repo y publica la web en `https://<usuario>.github.io/<repo>/`. Los enlaces de planes compartidos apuntan a esa URL.
 
 ## App Android (APK)
 
@@ -98,7 +100,7 @@ A partir de ahí se ejecuta **cada lunes a las 04:00 UTC**: recolecta, guarda lo
 
 - Bloqueada en vertical, con icono y pantalla de inicio propios.
 - Lleva dentro las carreras del último volcado, Leaflet y el generador de QR, así que funciona sin conexión.
-- Con internet, al abrirse descarga `races.json` de la web publicada en GitHub Pages. Los datos semanales llegan sin reinstalar.
+- Con internet, al abrirse descarga `races.json` de la web publicada en GitHub Pages. Los datos nuevos llegan sin reinstalar.
 - Compartir plan y exportar `.ics` usan el menú nativo de Android. Los enlaces externos se abren en el navegador. "Usar mi ubicación" pide permiso de GPS.
 
 Recompilar (necesita JDK 21 y el SDK de Android 35):
@@ -121,7 +123,8 @@ web/                app estática sin build (HTML + CSS + JS + Leaflet)
   data/municipios.json 8.155 municipios con su centro (IGN vía es-atlas) para buscar "cerca de"
 mobile/             app Android (Capacitor): prepare-web.mjs copia web/ en modo app
 tools/build_artifact.py  versión para vista previa en Claude
-.github/workflows/weekly.yml  cron semanal + despliegue en Pages
+.github/workflows/weekly.yml  cron 2 veces al día + despliegue en Pages
+mobile/runners/check.js       tarea en segundo plano de la APK: notificaciones de carreras nuevas
 ```
 
 ## Inspiración (qué hay en el mercado)

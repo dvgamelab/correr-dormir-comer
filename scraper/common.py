@@ -10,12 +10,13 @@ from urllib3.util.retry import Retry
 
 log = logging.getLogger("scraper")
 
-UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36"
+# Identificador honesto: Cloudflare bloquea a clientes que dicen ser Chrome sin serlo (pasó con running.life).
+UA = "correr-dormir-comer/1.0 (+https://dvgamelab.github.io/correr-dormir-comer/)"
 
 
 def session() -> requests.Session:
     s = requests.Session()
-    s.headers.update({"User-Agent": UA, "Accept-Language": "es-ES,es;q=0.9,en;q=0.7"})
+    s.headers.update({"User-Agent": UA, "Accept": "*/*", "Accept-Language": "es-ES,es;q=0.9,en;q=0.7"})
     retry = Retry(total=4, backoff_factor=1.5, status_forcelist=(429, 500, 502, 503, 504), allowed_methods=None)
     s.mount("https://", HTTPAdapter(max_retries=retry))
     s.mount("http://", HTTPAdapter(max_retries=retry))

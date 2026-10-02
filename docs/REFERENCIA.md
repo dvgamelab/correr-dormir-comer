@@ -25,7 +25,7 @@ Repo: `dvgamelab/correr-dormir-comer` · Web: https://dvgamelab.github.io/correr
 ```
 scraper/ (Python)  →  web/data/*.json  →  web/ (HTML+CSS+JS sin build)  →  GitHub Pages
                                                     ↘  mobile/ (Capacitor) → APK
-.github/workflows/weekly.yml: cron semanal → recolecta → commit de datos → despliega Pages
+.github/workflows/weekly.yml: cron 2 veces al día → recolecta → commit de datos → despliega Pages
 ```
 
 - **Sin backend.** Datos estáticos JSON en Pages y el estado del usuario en `localStorage`. Compartir va **dentro del propio enlace** (JSON → `CompressionStream('deflate-raw')` → base64url → `?plan=`).
@@ -72,6 +72,8 @@ Una misma carrera aparece en 2-5 webs con nombres distintos. Reglas que acabaron
 | La búsqueda de restaurantes no respondía | Overpass saturado, consultado en serie con 20 s cada uno | `Promise.any` a 3 servidores con 9 s y respaldo con Nominatim |
 | Todo salía como "trail" | La ficha de running.life incluía categorías de "carreras cercanas" | Ignorar esas categorías y usar la lista de trail |
 | Desbordamiento horizontal en móvil | Grid sin `minmax(0,1fr)` e inputs de fecha anchos | `grid-template-columns:minmax(0,1fr)` y `min-width:0` |
+| Una fuente pasó de 1.880 a 889 carreras y se publicó así | Cloudflare devolvía 403 a un User-Agent falso de Chrome | UA honesto con la URL del proyecto + **salvaguarda**: si una fuente trae <70 % de lo anterior se conservan los datos previos |
+| Carreras de Colonia, Chicago… en el mapa de España | Webs con carreras extranjeras; el geocoder las colocaba en pueblos españoles | Descartar por provincia/región extranjera en el texto y por GPS fuera de España |
 | Maven Central 429 al compilar | IP compartida | Espejo de Google en `~/.gradle/init.gradle` |
 | Deploy de Pages fallaba | Repo privado y Pages sin activar | Repo público + Settings → Pages → Source: GitHub Actions (lo hace el usuario desde el navegador, no desde la app de GitHub) |
 
@@ -81,6 +83,14 @@ Una misma carrera aparece en 2-5 webs con nombres distintos. Reglas que acabaron
 - **Firma propia estable** (`mobile/cdc-release.keystore` + `keystore.properties`, fuera del repo). Si se pierde, las APK nuevas no se instalan encima.
 - Enlaces: esquema `correrdormircomer://plan?c=…`. Desde la web en Android, botón "Abrir en la app" con `intent://`.
 - Iconos: legacy + round + adaptativo (primer plano dentro de la zona segura de 66/108 dp) y splash, generados desde el SVG con Playwright.
+
+## 7b. Novedades y notificaciones (sin backend)
+
+- **Fecha de alta por URL de origen** en `data/seen.json`: una carrera es nueva solo si *todas* sus URLs son nuevas (así no salta como nueva al sumarse otra web). La primera ejecución marca todo como `base`.
+- `web/data/news.json` (30 días, campos mínimos) para que la consulta en segundo plano sea ligera.
+- En la app: chip "Nuevas", etiqueta NUEVA, aviso desde la última visita y alertas guardadas con los filtros.
+- APK: `@capacitor/background-runner` (`mobile/runners/check.js`, cada 120 min, `autoStart`). La app le pasa modo, alertas y última novedad vista con `dispatchEvent("setPrefs")`; el runner guarda estado en `CapacitorKV` y avisa con `CapacitorNotifications`. Permiso `POST_NOTIFICATIONS` pedido una vez al abrir. Algunas marcas (Xiaomi, Huawei…) matan tareas: ver dontkillmyapp.com.
+- iPhone/web: sin push (necesitaría servidor); se ve al abrir.
 
 ## 8. UX que gustó (reutilizar)
 

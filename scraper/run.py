@@ -325,6 +325,9 @@ def main():
             races = [r.to_dict() for r in mod.fetch(cache, **kw)]
             if not races:
                 raise RuntimeError("0 carreras: ¿cambió la web?")
+            prev = len(load(os.path.join(RAW, f"{name}.json"), []))
+            if prev >= 50 and len(races) < prev * 0.7:  # caída brusca = bloqueo o web cambiada: no perder datos buenos
+                raise RuntimeError(f"solo {len(races)} carreras frente a {prev} la vez anterior; se conservan los datos previos")
             dump(os.path.join(RAW, f"{name}.json"), races)
             status[name] = {"ok": True, "count": len(races), "at": dt.datetime.utcnow().isoformat(timespec="seconds") + "Z",
                             "secs": round(time.time() - t0)}
@@ -337,6 +340,12 @@ def main():
     dump(os.path.join(DATA, "status.json"), status)
 
     build(args.geocode_budget, status)
+
+
+# provincias/regiones que algunas webs ponen a carreras del extranjero
+FOREIGN = re.compile(r"\b(alemania|francia|portugal|italia|andorra|marruecos|reino unido|inglaterra|irlanda|suiza|austria|holanda|"
+                     r"pa[ií]ses bajos|b[eé]lgica|bèlgica|eslov[eè]nia|grecia|jap[oó]n|china|cuba|aruba|m[eé]xico|argentina|chile|"
+                     r"colombia|per[uú]|estados unidos|eeuu|usa|california|new york|loiret)\b|^ue-", re.I)
 
 
 def build(geocode_budget, status):
@@ -355,6 +364,8 @@ def build(geocode_budget, status):
                     ds.append(x)
             r["distances"] = sorted(ds)
             if not r.get("date") or r["date"] < today or not is_running(r["name"], r.get("kind", "")):
+                continue
+            if FOREIGN.search(r.get("province") or "") or FOREIGN.search(r.get("region") or ""):
                 continue
             rows.append(r)
     log.info("filas brutas: %d", len(rows))
@@ -390,6 +401,10 @@ def build(geocode_budget, status):
         r["approx"] = approx
         r["_tok"] = tokens(r["name"])
     gc.save()
+    before = len(rows)
+    in_es = lambda r: r.get("lat") is not None and 27.4 < r["lat"] < 44.0 and -18.5 < r["lon"] < 4.6  # península, Baleares y Canarias
+    rows = [r for r in rows if r["province"] or in_es(r)]  # sin provincia española ni GPS en España: extranjera o sin ubicar
+    log.info("descartadas %d fichas fuera de España o sin ubicación", before - len(rows))
 
     # ------------------------------------------------------------- dedupe
     clusters = dedupe(rows)
@@ -401,6 +416,7 @@ def build(geocode_budget, status):
     merged.sort(key=lambda x: (x["date"], x["name"]))
     log.info("carreras únicas: %d", len(merged))
 
+    mark_new(merged)
     meta = {
         "generated": dt.datetime.utcnow().isoformat(timespec="seconds") + "Z",
         "count": len(merged),
@@ -429,6 +445,35 @@ def tidy(s):
         else:
             out.append(re.sub(r"(^|[-'’(/])(\w)", lambda m: m.group(1) + m.group(2).upper(), w))
     return " ".join(out)
+
+
+NEWS = os.path.join(ROOT, "web", "data", "news.json")
+SEEN = os.path.join(DATA, "seen.json")
+
+
+def mark_new(merged, now=None):
+    """Fecha en que cada carrera apareció por primera vez (por las URLs de sus fuentes).
+
+    Una carrera es nueva solo si TODAS sus fichas son nuevas: si ya estaba en otra web, no cuenta.
+    Escribe además web/data/news.json (lo añadido en los últimos 30 días), que lee la app y
+    las notificaciones de la APK."""
+    now = now or dt.datetime.utcnow().strftime("%Y-%m-%dT%H:%MZ")
+    seen = load(SEEN, None)
+    first_run = seen is None
+    seen = seen or {}
+    for m in merged:
+        urls = [x["u"] for x in m.get("src", [])]
+        for u in urls:
+            seen.setdefault(u, "base" if first_run else now)
+        vals = [seen[u] for u in urls]
+        if vals and "base" not in vals:
+            m["added"] = min(vals)
+    dump(SEEN, seen)
+    cutoff = (dt.datetime.utcnow() - dt.timedelta(days=30)).strftime("%Y-%m-%dT%H:%MZ")
+    keep = ("id", "name", "date", "time", "city", "province", "ccaa", "surface", "cats", "dist", "lat", "lon", "added")
+    news = sorted((m for m in merged if m.get("added", "") >= cutoff), key=lambda m: m["added"], reverse=True)
+    dump(NEWS, {"generated": now, "races": [{k: m[k] for k in keep if k in m} for m in news]})
+    log.info("novedades: %d carreras nuevas en los últimos 30 días", len(news))
 
 
 def merge(c):

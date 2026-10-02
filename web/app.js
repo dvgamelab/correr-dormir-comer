@@ -46,6 +46,12 @@ let RACES = [], META = {}, BYID = new Map(), TOWNS = new Map();
 const F = { q: "", surf: new Set(), cats: new Set(), when: "all", from: "", to: "", ccaa: "", prov: "", near: null, nearKm: 50, fav: false, mapOnly: false, ...store.get("filters", {}) };
 F.surf = new Set(F.surf || []); F.cats = new Set(F.cats || []);
 let favs = new Set(store.get("favs", []));
+// ---- novedades y alertas
+const NEW_DAYS = 7;
+let alerts = store.get("alerts", []), alertMode = store.get("alertMode", "all");
+let lastVisit = store.get("lastVisit", null), newSinceVisit = [];
+const newCutoff = () => new Date(Date.now() - NEW_DAYS * 864e5).toISOString().slice(0, 16);
+const isNew = r => r.added && r.added >= newCutoff();
 let plans = store.get("plans", {});
 let filtered = [], shown = 0, selId = null, SEARCH = null;
 const PLACES = new Map(); // nombre plegado → [{name, lat, lon, prov}]
@@ -134,6 +140,7 @@ async function load() {
   $("#ccaa").insertAdjacentHTML("beforeend", cc.map(c => `<option>${esc(c)}</option>`).join(""));
   fillProvinces();
   renderFoot();
+  initNews();
   syncFilterUI();
   initMap();
   apply();
@@ -190,6 +197,7 @@ function apply() {
     if (F.ccaa && r.ccaa !== F.ccaa) return false;
     if (F.prov && r.province !== F.prov) return false;
     if (F.fav && !favs.has(r.id)) return false;
+    if (F.newOnly && !isNew(r)) return false;
     if (q.length && !q.every(w => r._s.includes(w))) return false;
     if (SEARCH) {
       const pl = SEARCH.place;
@@ -212,14 +220,16 @@ function apply() {
   });
   if (SEARCH) filtered.sort((a, b) => (a._grp === b._grp ? 0 : a._grp === "in" ? -1 : 1) ||
     (a._grp === "near" ? a._d - b._d : 0) || a.date.localeCompare(b.date)); // primero el municipio, luego lo cercano por distancia
+  if (F.newOnly && !SEARCH) filtered.sort((a, b) => b.added.localeCompare(a.added) || a.date.localeCompare(b.date));
   shown = 0;
-  $("#list").innerHTML = SEARCH ? searchBanner() : "";
+  $("#list").innerHTML = SEARCH ? searchBanner() : newsBanner();
   renderMore();
   const n = filtered.length;
   $("#count").innerHTML = `<span class="num">${n.toLocaleString("es-ES")}</span><span class="lbl">${n === 1 ? "carrera" : "carreras"}${F.fav ? " favoritas" : ""}</span>`;
   $("#applyFilters").textContent = `Ver ${n.toLocaleString("es-ES")} ${n === 1 ? "carrera" : "carreras"}`;
   $("#filtersBadge").hidden = !(F.when !== "all" || F.ccaa || F.prov || F.near || F.mapOnly);
   $$(".chip[data-when]").forEach(b => b.classList.toggle("on", F.when === b.dataset.when));
+  $(".chip[data-new]")?.classList.toggle("on", !!F.newOnly);
   drawMarkers();
   if (map && !$("#viewMap").hidden && !F.mapOnly) { mapTouched = false; fitToResults(); }
   saveFilters();
@@ -269,13 +279,92 @@ function bindFilters() {
   $("#nearKm").addEventListener("change", e => { F.nearKm = +e.target.value; apply(); });
   $("#mapFilter").addEventListener("change", e => { F.mapOnly = e.target.checked; apply(); });
   $("#clearFilters").addEventListener("click", () => {
-    Object.assign(F, { q: "", when: "all", from: "", to: "", ccaa: "", prov: "", near: null, mapOnly: false });
+    Object.assign(F, { q: "", when: "all", from: "", to: "", ccaa: "", prov: "", near: null, mapOnly: false, newOnly: false });
     F.surf.clear(); F.cats.clear(); $("#nearTown").value = ""; syncFilterUI(); apply();
   });
   $("#more").addEventListener("click", renderMore);
   new IntersectionObserver(es => { if (es[0].isIntersecting && shown < filtered.length) renderMore(); }, { root: $("#viewList"), rootMargin: "600px" }).observe($("#more"));
 }
 const toggleSet = (s, v) => (s.has(v) ? s.delete(v) : s.add(v));
+function newsBanner() {
+  if (F.newOnly) return `<div class="news-banner info"><b>Carreras añadidas en los últimos ${NEW_DAYS} días</b><span class="small muted">Ordenadas de la más reciente a la más antigua. Se buscan novedades dos veces al día.</span></div>`;
+  if (!newSinceVisit.length || store.get("bannerSeen", "") === lastVisitKey) return "";
+  const mine = alerts.length ? newSinceVisit.filter(r => alerts.some(a => matchAlert(r, a))) : [];
+  return `<div class="news-banner" id="newsBanner"><div><b>${newSinceVisit.length} ${newSinceVisit.length === 1 ? "carrera nueva" : "carreras nuevas"} desde tu última visita</b>
+    ${mine.length ? `<span class="small">${mine.length} encaja${mine.length === 1 ? "" : "n"} con tus alertas</span>` : ""}</div>
+    <div class="nb-actions"><button class="btn primary small" type="button" data-see-new>Ver</button><button class="x small-x" type="button" data-close-banner aria-label="Cerrar">✕</button></div></div>`;
+}
+let lastVisitKey = "";
+function initNews() {
+  const t = new Date().toISOString().slice(0, 16);
+  lastVisitKey = lastVisit || "";
+  newSinceVisit = lastVisit ? RACES.filter(r => r.added && r.added > lastVisit) : [];
+  store.set("lastVisit", t); // la próxima vez solo cuenta lo que aparezca a partir de ahora
+  const n = RACES.filter(isNew).length;
+  const chip = $(".chip[data-new]"); chip.hidden = !n; $("#newCount").textContent = n;
+  renderAlerts(); syncNotifier();
+  if (APP && alertMode !== "off" && !store.get("notifAsked", false)) { store.set("notifAsked", true); setTimeout(askNotifyPermission, 1500); }
+}
+// ---- alertas: filtros guardados que avisan cuando aparece una carrera nueva que encaja
+function matchAlert(r, a) {
+  if (a.surf?.length && !a.surf.includes(r.surface || "road")) return false;
+  if (a.cats?.length) { const cs = (r.cats || []).filter(c => c !== "trail"); if (!a.cats.some(c => c === "other" ? !cs.length : cs.includes(c))) return false; }
+  if (a.ccaa && r.ccaa !== a.ccaa) return false;
+  if (a.prov && r.province !== a.prov) return false;
+  if (a.near && (!r.lat || haversine(a.near.lat, a.near.lon, r.lat, r.lon) > a.nearKm)) return false;
+  if (a.q) { const s = fold(`${r.name} ${r.city || ""} ${r.province || ""}`); if (!fold(a.q).split(/\s+/).filter(Boolean).every(w => s.includes(w))) return false; }
+  return true;
+}
+const CAT_L = { "5k": "5K", "10k": "10K", "21k": "Media", "42k": "Maratón", ultra: "Ultra", other: "Otras" };
+function alertLabel(a) {
+  const parts = [];
+  if (a.surf?.length) parts.push(a.surf.map(x => x === "trail" ? "Trail" : "Asfalto").join(" o "));
+  if (a.cats?.length) parts.push(a.cats.map(c => CAT_L[c]).join(", "));
+  if (a.q) parts.push(`"${a.q}"`);
+  if (a.near) parts.push(`a ${a.nearKm} km de ${a.near.name}`); else if (a.prov) parts.push(a.prov); else if (a.ccaa) parts.push(a.ccaa);
+  return parts.join(" · ") || "Cualquier carrera";
+}
+function renderAlerts() {
+  const box = $("#alertsList"); if (!box) return;
+  box.innerHTML = alerts.length ? alerts.map(a => `<div class="alert-row"><span>🔔 ${esc(alertLabel(a))}</span><button class="x small-x" type="button" data-del-alert="${a.id}" aria-label="Borrar alerta">✕</button></div>`).join("")
+    : `<p class="small muted" style="margin:0">Todavía no tienes alertas.</p>`;
+  $$("input[name=amode]").forEach(i => (i.checked = i.value === alertMode));
+}
+async function askNotifyPermission() {
+  const br = window.Capacitor?.Plugins?.BackgroundRunner;
+  if (!APP || !br) return;
+  try { await br.requestPermissions({ apis: ["notifications"] }); } catch { /* el usuario puede negarlo */ }
+}
+function syncNotifier() { // pasa alertas y modo a la tarea en segundo plano de la APK
+  const br = window.Capacitor?.Plugins?.BackgroundRunner;
+  if (!APP || !br) return;
+  const since = RACES.reduce((m, r) => (r.added && r.added > m ? r.added : m), "");
+  br.dispatchEvent({ label: "es.correrdormircomer.app.novedades", event: "setPrefs",
+    details: { mode: alertMode, alerts, since, newsUrl: (PUBLIC_URL || "https://dvgamelab.github.io/correr-dormir-comer/") + "data/news.json" } }).catch(() => {});
+}
+function bindAlerts() {
+  $("#addAlert").onclick = async () => {
+    const a = { id: Math.random().toString(36).slice(2, 8), surf: [...F.surf], cats: [...F.cats], ccaa: F.ccaa, prov: F.prov,
+      near: F.near ? { name: F.near.name, lat: F.near.lat, lon: F.near.lon } : null, nearKm: F.nearKm, q: SEARCH ? "" : F.q.trim() };
+    if (SEARCH) a.near = { name: SEARCH.place.name, lat: SEARCH.place.lat, lon: SEARCH.place.lon }, a.nearKm = SEARCH.R;
+    if (alerts.some(x => alertLabel(x) === alertLabel(a))) return toast("Ya tienes esa alerta");
+    alerts.push(a); store.set("alerts", alerts);
+    if (alertMode !== "alerts") { alertMode = "alerts"; store.set("alertMode", alertMode); }
+    renderAlerts(); syncNotifier(); await askNotifyPermission();
+    toast(`Alerta creada: ${alertLabel(a)}`);
+  };
+  $("#alertsList").onclick = e => {
+    const b = e.target.closest("[data-del-alert]"); if (!b) return;
+    alerts = alerts.filter(a => a.id !== b.dataset.delAlert); store.set("alerts", alerts); renderAlerts(); syncNotifier();
+  };
+  $$("input[name=amode]").forEach(i => i.onchange = async () => { alertMode = i.value; store.set("alertMode", alertMode); syncNotifier(); if (alertMode !== "off") await askNotifyPermission(); });
+  $(".chip[data-new]").onclick = () => { F.newOnly = !F.newOnly; $("#viewList").scrollTop = 0; apply(); };
+  $("#list").addEventListener("click", e => {
+    if (e.target.closest("[data-see-new]")) { store.set("bannerSeen", lastVisitKey); F.newOnly = true; $("#viewList").scrollTop = 0; apply(); }
+    else if (e.target.closest("[data-close-banner]")) { store.set("bannerSeen", lastVisitKey); $("#newsBanner")?.remove(); }
+  });
+  if (!APP) $("#alertsHelp").textContent = "Cada día se buscan carreras nuevas dos veces. Crea alertas con los filtros de arriba: al abrir la app verás las novedades que encajan. Las notificaciones en el móvil funcionan en la app de Android.";
+}
 function openFilterSheet(on) { $("#filterSheet").hidden = !on; $("#scrim").hidden = !on; }
 
 // ------------------------------------------------------------------ lista
@@ -302,7 +391,7 @@ function cardHTML(r) {
     <div class="bib ${surf}"><span class="d">${d.getDate()}</span><span class="m">${DAYS[d.getDay()]}<br>${MONTHS[d.getMonth()]}</span></div>
     <div>
       <h3>${esc(r.name)}</h3>
-      <div class="where"><span class="pill ${surf}">${surf === "trail" ? "Trail" : "Asfalto"}</span><span>${esc(where || "Ubicación por confirmar")}</span>${r._d != null && r._grp !== "in" ? `<span class="away">a ${fmtKm(r._d)}</span>` : ""}</div>
+      <div class="where"><span class="pill ${surf}">${surf === "trail" ? "Trail" : "Asfalto"}</span>${isNew(r) ? `<span class="new-badge">NUEVA</span>` : ""}<span>${esc(where || "Ubicación por confirmar")}</span>${r._d != null && r._grp !== "in" ? `<span class="away">a ${fmtKm(r._d)}</span>` : ""}</div>
       ${dists ? `<div class="dists">${dists}</div>` : ""}
     </div>
     <button class="fav${favs.has(r.id) ? " on" : ""}" data-fav="${r.id}" type="button" aria-label="Favorita" aria-pressed="${favs.has(r.id)}">${favs.has(r.id) ? "♥" : "♡"}</button>
@@ -318,9 +407,14 @@ function searchBanner() {
     ${nIn ? "" : `<p class="small muted" style="margin:6px 0 0">No hay carreras en ${esc(place.name)} con estos filtros; te enseño las cercanas.</p>`}
   </div>`;
 }
-function groupOf(r) { return SEARCH ? r._grp : weekKey(r.date); }
+function groupOf(r) { return SEARCH ? r._grp : F.newOnly ? "n" + r.added.slice(0, 10) : weekKey(r.date); }
 function groupHeader(g) {
   const n = filtered.filter(x => groupOf(x) === g).length;
+  if (!SEARCH && g[0] === "n") {
+    const d = g.slice(1), t = iso(new Date()), y = addDays(t, -1);
+    const lbl = d === t ? "Añadidas hoy" : d === y ? "Añadidas ayer" : `Añadidas el ${fmtShort(d)}`;
+    return `<h2 class="wk-h new-h">${lbl}<span class="n">${n}</span></h2>`;
+  }
   if (!SEARCH) return `<h2 class="wk-h">${weekLabel(g)}<span class="n">${n}</span></h2>`;
   const pl = SEARCH.place.name;
   return g === "in"
@@ -484,6 +578,7 @@ function handleBack() {
   const tab = $(".tabbar button.on")?.dataset.view;
   if (tab && tab !== "list") { setTab("list"); return true; }
   if (F.q) { F.q = ""; $("#q").value = ""; apply(); return true; }
+  if (F.newOnly) { F.newOnly = false; apply(); return true; }
   if (Date.now() - lastBack < 2000) return false;
   lastBack = Date.now(); toast("Pulsa atrás otra vez para salir"); return true;
 }
@@ -1400,7 +1495,7 @@ window.__cdc = { get map() { return map; }, get filtered() { return filtered; } 
 // ------------------------------------------------------------------ init
 function init() {
   $("#plansCount").textContent = Object.keys(plans).length;
-  bindFilters(); bindList();
+  bindFilters(); bindList(); bindAlerts();
   $("#brandLink").onclick = e => { e.preventDefault(); setTab("list"); $("#viewList").scrollTop = 0; };
   F.fav = false;
   $$(".tabbar button").forEach(b => b.onclick = () => setTab(b.dataset.view));

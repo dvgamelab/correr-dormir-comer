@@ -2,6 +2,20 @@
   "appId": "es.correrdormircomer.app",
   "appName": "Correr Dormir Comer",
   "webDir": "www",
-  "android": { "backgroundColor": "#EEF1EF" },
-  "server": { "androidScheme": "https" }
+  "android": {
+    "backgroundColor": "#EEF1EF"
+  },
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "BackgroundRunner": {
+      "label": "es.correrdormircomer.app.novedades",
+      "src": "runners/check.js",
+      "event": "checkNew",
+      "repeat": true,
+      "interval": 120,
+      "autoStart": true
+    }
+  }
 }

@@ -38,6 +38,7 @@
       </button>
     </div>
     <div class="chips" role="group" aria-label="Filtros rápidos">
+      <button class="chip chip-new" data-new type="button" hidden>Nuevas <span class="nbadge" id="newCount">0</span></button>
       <button class="chip" data-when="thisw" type="button">Este finde</button>
       <button class="chip" data-surface="road" type="button"><i class="dot road"></i>Asfalto</button>
       <button class="chip" data-surface="trail" type="button"><i class="dot trail"></i>Trail</button>
@@ -99,6 +100,17 @@
     </div>
     <button class="btn ghost" id="useGps" type="button"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>Usar mi ubicación</button>
     <datalist id="towns"></datalist>
+    <section class="alerts-box" id="alertsBox">
+      <h3>Avisos de carreras nuevas</h3>
+      <p class="small muted" id="alertsHelp">Cada día se buscan carreras nuevas dos veces. Crea una alerta con los filtros de arriba y te avisaremos cuando aparezca una que encaje.</p>
+      <div class="seg-mode" role="radiogroup" aria-label="Qué avisar">
+        <label><input type="radio" name="amode" value="alerts"> Solo mis alertas</label>
+        <label><input type="radio" name="amode" value="all"> Todas las nuevas</label>
+        <label><input type="radio" name="amode" value="off"> Nada</label>
+      </div>
+      <div id="alertsList" class="alerts-list"></div>
+      <button class="btn ghost" id="addAlert" type="button"><svg viewBox="0 0 24 24"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10 21a2 2 0 0 0 4 0"/></svg>Crear alerta con estos filtros</button>
+    </section>
     <div class="sheet-actions">
       <button class="btn ghost" id="clearFilters" type="button">Limpiar</button>
       <button class="btn primary" id="applyFilters" type="button">Ver carreras</button>
