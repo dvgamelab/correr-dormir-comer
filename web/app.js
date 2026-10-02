@@ -104,17 +104,20 @@ function saveFilters() { store.set("filters", { ...F, surf: [...F.surf], cats: [
 
 // ------------------------------------------------------------------ carga
 // En la app Android los datos vienen incluidos; si hay internet se intenta la versión semanal publicada.
-async function fetchRaces() {
+async function fetchRaces() { // usa el conjunto más reciente: el publicado o el incluido en la app
+  const local = fetch("data/races.json", { cache: "no-cache" }).then(r => r.json()).catch(() => null);
   const remote = window.CDC_DATA_URL;
+  let d = null;
   if (remote) {
     try {
       const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 6000);
       const r = await fetch(remote, { cache: "no-cache", signal: ctl.signal }).finally(() => clearTimeout(to));
-      if (r.ok) { const d = await r.json(); if (d.races?.length) return d; }
+      if (r.ok) { const j = await r.json(); if (j.races?.length) d = j; }
     } catch { /* sin conexión: datos incluidos */ }
   }
-  const r = await fetch("data/races.json", { cache: "no-cache" });
-  return r.json();
+  const l = await local;
+  if (!d || (l?.races?.length && (l.meta?.generated || "") > (d.meta?.generated || ""))) d = l;
+  return d;
 }
 async function load() {
   try {
