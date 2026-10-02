@@ -287,7 +287,7 @@ function bindFilters() {
 }
 const toggleSet = (s, v) => (s.has(v) ? s.delete(v) : s.add(v));
 function newsBanner() {
-  if (F.newOnly) return `<div class="news-banner info"><b>Carreras añadidas en los últimos ${NEW_DAYS} días</b><span class="small muted">Ordenadas de la más reciente a la más antigua. Se buscan novedades dos veces al día.</span></div>`;
+  if (F.newOnly) return `<div class="news-banner info"><b>Carreras añadidas en los últimos ${NEW_DAYS} días</b><span class="small muted">Ordenadas de la más reciente a la más antigua. Se buscan novedades lunes, miércoles y viernes.</span></div>`;
   if (!newSinceVisit.length || store.get("bannerSeen", "") === lastVisitKey) return "";
   const mine = alerts.length ? newSinceVisit.filter(r => alerts.some(a => matchAlert(r, a))) : [];
   return `<div class="news-banner" id="newsBanner"><div><b>${newSinceVisit.length} ${newSinceVisit.length === 1 ? "carrera nueva" : "carreras nuevas"} desde tu última visita</b>
@@ -363,7 +363,7 @@ function bindAlerts() {
     if (e.target.closest("[data-see-new]")) { store.set("bannerSeen", lastVisitKey); F.newOnly = true; $("#viewList").scrollTop = 0; apply(); }
     else if (e.target.closest("[data-close-banner]")) { store.set("bannerSeen", lastVisitKey); $("#newsBanner")?.remove(); }
   });
-  if (!APP) $("#alertsHelp").textContent = "Cada día se buscan carreras nuevas dos veces. Crea alertas con los filtros de arriba: al abrir la app verás las novedades que encajan. Las notificaciones en el móvil funcionan en la app de Android.";
+  if (!APP) $("#alertsHelp").textContent = "Se buscan carreras nuevas los lunes, miércoles y viernes. Crea alertas con los filtros de arriba: al abrir la app verás las novedades que encajan. Las notificaciones en el móvil funcionan en la app de Android.";
 }
 function openFilterSheet(on) { $("#filterSheet").hidden = !on; $("#scrim").hidden = !on; }
 

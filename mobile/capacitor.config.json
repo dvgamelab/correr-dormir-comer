@@ -14,7 +14,7 @@
       "src": "runners/check.js",
       "event": "checkNew",
       "repeat": true,
-      "interval": 120,
+      "interval": 360,
       "autoStart": true
     }
   }
