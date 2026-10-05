@@ -25,7 +25,7 @@ Repo: `dvgamelab/correr-dormir-comer` · Web: https://dvgamelab.github.io/correr
 ```
 scraper/ (Python)  →  web/data/*.json  →  web/ (HTML+CSS+JS sin build)  →  GitHub Pages
                                                     ↘  mobile/ (Capacitor) → APK
-.github/workflows/weekly.yml: cron lunes/miércoles/viernes → recolecta → commit de datos → despliega Pages
+.github/workflows/weekly.yml: cron diario → recolecta → commit de datos → despliega Pages
 ```
 
 - **Sin backend.** Datos estáticos JSON en Pages y el estado del usuario en `localStorage`. Compartir va **dentro del propio enlace** (JSON → `CompressionStream('deflate-raw')` → base64url → `?plan=`).
@@ -91,7 +91,7 @@ Una misma carrera aparece en 2-5 webs con nombres distintos. Reglas que acabaron
 - En la app: chip "Nuevas", etiqueta NUEVA, aviso desde la última visita y alertas guardadas con los filtros.
 - APK: `@capacitor/background-runner` (`mobile/runners/check.js`, cada 360 min, `autoStart`). La app le pasa modo, alertas y última novedad vista con `dispatchEvent("setPrefs")`; el runner guarda estado en `CapacitorKV` y avisa con `CapacitorNotifications`. Permiso `POST_NOTIFICATIONS` pedido una vez al abrir. Algunas marcas (Xiaomi, Huawei…) matan tareas: ver dontkillmyapp.com.
 - Una carrera deja de ser "nueva" a los 7 días de aparecer por primera vez (`NEW_DAYS`); el aviso de la app cuenta solo lo aparecido desde la última visita.
-- El usuario quiso 2-3 recogidas por semana (dos al día le pareció excesivo).
+- Frecuencia elegida por el usuario: una recogida al día (dos al día le pareció excesivo).
 - iPhone/web: sin push (necesitaría servidor); se ve al abrir.
 
 ## 8. UX que gustó (reutilizar)

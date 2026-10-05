@@ -1,6 +1,6 @@
 # Correr · Dormir · Comer
 
-Calendario de **todas las carreras de España que se pueden encontrar**: asfalto, trail, 5K, 10K, media, maratón y ultra. Se vuelve a recolectar **3 veces por semana** (lunes, miércoles y viernes), avisa de las carreras nuevas y convierte cualquier carrera en un **plan de fin de semana**: correr, dormir y comer. El plan completo se comparte con un enlace.
+Calendario de **todas las carreras de España que se pueden encontrar**: asfalto, trail, 5K, 10K, media, maratón y ultra. Se vuelve a recolectar **cada día**, avisa de las carreras nuevas y convierte cualquier carrera en un **plan de fin de semana**: correr, dormir y comer. El plan completo se comparte con un enlace.
 
 Proyecto personal, sin monetización.
 
@@ -87,12 +87,12 @@ cd web && python -m http.server 8000   # abre http://localhost:8000
 ```
 Para refrescar solo una fuente: `python scraper/run.py --only runedia`.
 
-### Publicado y actualizado 3 veces por semana (GitHub Pages)
+### Publicado y actualizado cada día (GitHub Pages)
 1. Crea un repositorio en GitHub y sube esta carpeta.
 2. En **Settings → Pages**, elige **Source: GitHub Actions** (hay que hacerlo antes del primer despliegue).
-3. En **Actions**, lanza "Recolectar carreras (3 veces por semana) y publicar" con *Run workflow*.
+3. En **Actions**, lanza "Recolectar carreras (diario) y publicar" con *Run workflow*.
 
-A partir de ahí se ejecuta **lunes, miércoles y viernes a las 05:00 UTC**: recolecta, guarda los datos en el repo y publica la web en `https://<usuario>.github.io/<repo>/`. Los enlaces de planes compartidos apuntan a esa URL.
+A partir de ahí se ejecuta **cada día a las 05:00 UTC**: recolecta, guarda los datos en el repo y publica la web en `https://<usuario>.github.io/<repo>/`. Los enlaces de planes compartidos apuntan a esa URL.
 
 ## App Android (APK)
 
@@ -123,7 +123,7 @@ web/                app estática sin build (HTML + CSS + JS + Leaflet)
   data/municipios.json 8.155 municipios con su centro (IGN vía es-atlas) para buscar "cerca de"
 mobile/             app Android (Capacitor): prepare-web.mjs copia web/ en modo app
 tools/build_artifact.py  versión para vista previa en Claude
-.github/workflows/weekly.yml  cron 3 veces por semana + despliegue en Pages
+.github/workflows/weekly.yml  cron diario + despliegue en Pages
 mobile/runners/check.js       tarea en segundo plano de la APK: notificaciones de carreras nuevas
 ```
 
