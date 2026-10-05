@@ -24,7 +24,7 @@ Proyecto personal, sin monetización.
 **Mapa.** Al tocar un punto aparece la carrera en un panel inferior. Si en ese sitio hay varias, salen todas en lista. Al tocar una, se abre su ficha.
 
 **Explorar**
-- **Novedades**: cada carrera guarda cuándo apareció por primera vez (`data/seen.json`). Chip "Nuevas" (últimos 7 días), etiqueta NUEVA, aviso "N carreras nuevas desde tu última visita" y `web/data/news.json` con lo añadido en 30 días.
+- **Novedades**: cada carrera guarda cuándo apareció por primera vez (`data/seen.json`). Pestaña "Novedades" (últimos 7 días, se combina con Asfalto, Trail, distancias, etc.), etiqueta NUEVA, aviso "N carreras nuevas desde tu última visita" y `web/data/news.json` con lo añadido en 30 días.
 - **Alertas**: en Filtros → "Crear alerta con estos filtros" (superficie, distancia, comunidad, provincia, cerca de un pueblo o texto). En la APK de Android una tarea en segundo plano revisa `news.json` cada ~6 horas y manda una notificación con las nuevas que encajen (o todas, según el modo elegido). En iPhone/web se ven al abrir la app.
 - Lista agrupada por fin de semana ("Este finde", "Próximo finde"…) junto a un mapa de España con todas las carreras.
 - Filtros: superficie (asfalto/trail), distancia (5K, 10K, media, maratón, ultra, otras), fecha (este finde, próximo, 30 días, 3 meses o fechas a medida), comunidad autónoma, "cerca de" un pueblo con radio (25–200 km), texto libre y favoritas.

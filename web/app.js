@@ -189,6 +189,7 @@ function apply() {
   const place = F.q ? findPlace(F.q) : null;
   SEARCH = place ? { place, R: F.searchKm || 30 } : null;
   if (SEARCH) q = [];
+  let newHere = 0;
   filtered = RACES.filter(r => {
     if (r.date < a || r.date > b) return false;
     if (F.surf.size && !F.surf.has(r.surface || "road")) return false;
@@ -200,7 +201,6 @@ function apply() {
     if (F.ccaa && r.ccaa !== F.ccaa) return false;
     if (F.prov && r.province !== F.prov) return false;
     if (F.fav && !favs.has(r.id)) return false;
-    if (F.newOnly && !isNew(r)) return false;
     if (q.length && !q.every(w => r._s.includes(w))) return false;
     if (SEARCH) {
       const pl = SEARCH.place;
@@ -219,6 +219,8 @@ function apply() {
       if (r._d > F.nearKm) return false;
     } else { r._d = null; r._grp = null; }
     if (bounds && (!r.lat || !bounds.contains([r.lat, r.lon]))) return false;
+    if (isNew(r)) newHere++; // novedades que cumplen el resto de filtros (número de la pestaña)
+    else if (F.newOnly) return false;
     return true;
   });
   if (SEARCH) filtered.sort((a, b) => (a._grp === b._grp ? 0 : a._grp === "in" ? -1 : 1) ||
@@ -233,6 +235,7 @@ function apply() {
   $("#filtersBadge").hidden = !(F.when !== "all" || F.ccaa || F.prov || F.near || F.mapOnly);
   $$(".chip[data-when]").forEach(b => b.classList.toggle("on", F.when === b.dataset.when));
   $(".chip[data-new]")?.classList.toggle("on", !!F.newOnly);
+  if ($("#newCount")) $("#newCount").textContent = newHere;
   drawMarkers();
   if (map && !$("#viewMap").hidden && !F.mapOnly) { mapTouched = false; fitToResults(); }
   saveFilters();
@@ -303,8 +306,6 @@ function initNews() {
   lastVisitKey = lastVisit || "";
   newSinceVisit = lastVisit ? RACES.filter(r => r.added && r.added > lastVisit) : [];
   store.set("lastVisit", t); // la próxima vez solo cuenta lo que aparezca a partir de ahora
-  const n = RACES.filter(isNew).length;
-  const chip = $(".chip[data-new]"); chip.hidden = !n; $("#newCount").textContent = n;
   renderAlerts(); syncNotifier();
   if (APP && alertMode !== "off" && !store.get("notifAsked", false)) { store.set("notifAsked", true); setTimeout(askNotifyPermission, 1500); }
 }
@@ -426,7 +427,7 @@ function groupHeader(g) {
 }
 function renderMore() {
   const list = $("#list");
-  if (!filtered.length) { list.insertAdjacentHTML("beforeend", `<p class="empty">Ninguna carrera con esos filtros. Prueba a ampliar fechas o radio.</p>`); $("#more").hidden = true; return; }
+  if (!filtered.length) { list.insertAdjacentHTML("beforeend", `<p class="empty">${F.newOnly ? `No hay carreras añadidas en los últimos ${NEW_DAYS} días con esos filtros.` : "Ninguna carrera con esos filtros. Prueba a ampliar fechas o radio."}</p>`); $("#more").hidden = true; return; }
   const slice = filtered.slice(shown, shown + PAGE);
   const lastEl = [...list.children].reverse().find(x => x.classList.contains("wk"));
   let html = "", lastG = lastEl?.dataset.wk, group = null;
