@@ -116,7 +116,9 @@ async function fetchRaces() { // usa el conjunto más reciente: el publicado o e
     } catch { /* sin conexión: datos incluidos */ }
   }
   const l = await local;
-  if (!d || (l?.races?.length && (l.meta?.generated || "") > (d.meta?.generated || ""))) d = l;
+  // los datos publicados sin fechas de alta vienen de una recogida antigua: mejor los incluidos en la app
+  const hasAdded = x => !!x?.races?.some(r => r.added);
+  if (!d || (l?.races?.length && ((hasAdded(l) && !hasAdded(d)) || (l.meta?.generated || "") > (d.meta?.generated || "")))) d = l;
   return d;
 }
 async function load() {
